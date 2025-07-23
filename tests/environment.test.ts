@@ -52,14 +52,14 @@ describe('Environment Variable Management', () => {
   };
 
   // Store original environment variables
-  let originalEnv: Partial<EnvironmentVariables>;
+  let originalEnv: { OPENAI_API_KEY?: string | undefined; OPENAI_BASE_URL?: string | undefined; OPENAI_MODEL?: string | undefined };
 
   beforeEach(() => {
     // Backup original environment variables
     originalEnv = {
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
-      OPENAI_MODEL: process.env.OPENAI_MODEL
+      OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
+      OPENAI_BASE_URL: process.env['OPENAI_BASE_URL'],
+      OPENAI_MODEL: process.env['OPENAI_MODEL']
     };
 
     // Clear environment variables for clean testing
@@ -69,21 +69,21 @@ describe('Environment Variable Management', () => {
   afterEach(() => {
     // Restore original environment variables
     if (originalEnv.OPENAI_API_KEY !== undefined) {
-      process.env.OPENAI_API_KEY = originalEnv.OPENAI_API_KEY;
+      process.env['OPENAI_API_KEY'] = originalEnv.OPENAI_API_KEY;
     } else {
-      delete process.env.OPENAI_API_KEY;
+      delete process.env['OPENAI_API_KEY'];
     }
 
     if (originalEnv.OPENAI_BASE_URL !== undefined) {
-      process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL;
+      process.env['OPENAI_BASE_URL'] = originalEnv.OPENAI_BASE_URL;
     } else {
-      delete process.env.OPENAI_BASE_URL;
+      delete process.env['OPENAI_BASE_URL'];
     }
 
     if (originalEnv.OPENAI_MODEL !== undefined) {
-      process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL;
+      process.env['OPENAI_MODEL'] = originalEnv.OPENAI_MODEL;
     } else {
-      delete process.env.OPENAI_MODEL;
+      delete process.env['OPENAI_MODEL'];
     }
   });
 
@@ -99,9 +99,9 @@ describe('Environment Variable Management', () => {
     it('should set environment variables from config entry and provider', () => {
       setEnvironmentVariables(sampleConfigEntry, sampleProvider);
 
-      expect(process.env.OPENAI_API_KEY).toBe('test-api-key-12345');
-      expect(process.env.OPENAI_BASE_URL).toBe('https://api.openai.com/v1');
-      expect(process.env.OPENAI_MODEL).toBe('gpt-4');
+      expect(process.env['OPENAI_API_KEY']).toBe('test-api-key-12345');
+      expect(process.env['OPENAI_BASE_URL']).toBe('https://api.openai.com/v1');
+      expect(process.env['OPENAI_MODEL']).toBe('gpt-4');
     });
 
     it('should throw error if config entry is missing', () => {
@@ -145,9 +145,9 @@ describe('Environment Variable Management', () => {
     it('should set environment variables from object', () => {
       setEnvironmentVariablesFromObject(sampleEnvVars);
 
-      expect(process.env.OPENAI_API_KEY).toBe('test-api-key-12345');
-      expect(process.env.OPENAI_BASE_URL).toBe('https://api.openai.com/v1');
-      expect(process.env.OPENAI_MODEL).toBe('gpt-4');
+      expect(process.env['OPENAI_API_KEY']).toBe('test-api-key-12345');
+      expect(process.env['OPENAI_BASE_URL']).toBe('https://api.openai.com/v1');
+      expect(process.env['OPENAI_MODEL']).toBe('gpt-4');
     });
 
     it('should throw error if environment variables object is missing', () => {
@@ -168,8 +168,8 @@ describe('Environment Variable Management', () => {
     });
 
     it('should detect missing API key', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_BASE_URL'] = 'https://api.openai.com/v1';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       const result = validateEnvironmentVariables();
 
@@ -178,8 +178,8 @@ describe('Environment Variable Management', () => {
     });
 
     it('should detect missing base URL', () => {
-      process.env.OPENAI_API_KEY = 'test-key';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_API_KEY'] = 'test-key';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       const result = validateEnvironmentVariables();
 
@@ -188,8 +188,8 @@ describe('Environment Variable Management', () => {
     });
 
     it('should detect missing model', () => {
-      process.env.OPENAI_API_KEY = 'test-key';
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      process.env['OPENAI_API_KEY'] = 'test-key';
+      process.env['OPENAI_BASE_URL'] = 'https://api.openai.com/v1';
 
       const result = validateEnvironmentVariables();
 
@@ -198,20 +198,20 @@ describe('Environment Variable Management', () => {
     });
 
     it('should detect empty API key', () => {
-      process.env.OPENAI_API_KEY = '';
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_API_KEY'] = '';
+      process.env['OPENAI_BASE_URL'] = 'https://api.openai.com/v1';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       const result = validateEnvironmentVariables();
 
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Environment variable OPENAI_API_KEY cannot be empty');
+      expect(result.errors).toContain('Missing required environment variable: OPENAI_API_KEY');
     });
 
     it('should detect invalid URL format', () => {
-      process.env.OPENAI_API_KEY = 'test-key';
-      process.env.OPENAI_BASE_URL = 'invalid-url';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_API_KEY'] = 'test-key';
+      process.env['OPENAI_BASE_URL'] = 'invalid-url';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       const result = validateEnvironmentVariables();
 
@@ -220,9 +220,9 @@ describe('Environment Variable Management', () => {
     });
 
     it('should warn about short API key', () => {
-      process.env.OPENAI_API_KEY = 'short';
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_API_KEY'] = 'short';
+      process.env['OPENAI_BASE_URL'] = 'https://api.openai.com/v1';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       const result = validateEnvironmentVariables();
 
@@ -230,9 +230,9 @@ describe('Environment Variable Management', () => {
     });
 
     it('should warn about non-HTTPS URL', () => {
-      process.env.OPENAI_API_KEY = 'test-api-key-12345';
-      process.env.OPENAI_BASE_URL = 'http://api.openai.com/v1';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_API_KEY'] = 'test-api-key-12345';
+      process.env['OPENAI_BASE_URL'] = 'http://api.openai.com/v1';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       const result = validateEnvironmentVariables();
 
@@ -284,9 +284,9 @@ describe('Environment Variable Management', () => {
 
       clearEnvironmentVariables();
 
-      expect(process.env.OPENAI_API_KEY).toBeUndefined();
-      expect(process.env.OPENAI_BASE_URL).toBeUndefined();
-      expect(process.env.OPENAI_MODEL).toBeUndefined();
+      expect(process.env['OPENAI_API_KEY']).toBeUndefined();
+      expect(process.env['OPENAI_BASE_URL']).toBeUndefined();
+      expect(process.env['OPENAI_MODEL']).toBeUndefined();
     });
   });
 
@@ -318,13 +318,13 @@ describe('Environment Variable Management', () => {
       clearEnvironmentVariables();
       restoreEnvironmentVariables(backup);
 
-      expect(process.env.OPENAI_API_KEY).toBe('test-api-key-12345');
-      expect(process.env.OPENAI_BASE_URL).toBe('https://api.openai.com/v1');
-      expect(process.env.OPENAI_MODEL).toBe('gpt-4');
+      expect(process.env['OPENAI_API_KEY']).toBe('test-api-key-12345');
+      expect(process.env['OPENAI_BASE_URL']).toBe('https://api.openai.com/v1');
+      expect(process.env['OPENAI_MODEL']).toBe('gpt-4');
     });
 
     it('should handle partial backup restoration', () => {
-      const partialBackup = {
+      const partialBackup: { OPENAI_API_KEY?: string | undefined; OPENAI_BASE_URL?: string | undefined; OPENAI_MODEL?: string | undefined } = {
         OPENAI_API_KEY: 'restored-key',
         OPENAI_BASE_URL: undefined,
         OPENAI_MODEL: 'restored-model'
@@ -332,9 +332,9 @@ describe('Environment Variable Management', () => {
 
       restoreEnvironmentVariables(partialBackup);
 
-      expect(process.env.OPENAI_API_KEY).toBe('restored-key');
-      expect(process.env.OPENAI_BASE_URL).toBeUndefined();
-      expect(process.env.OPENAI_MODEL).toBe('restored-model');
+      expect(process.env['OPENAI_API_KEY']).toBe('restored-key');
+      expect(process.env['OPENAI_BASE_URL']).toBeUndefined();
+      expect(process.env['OPENAI_MODEL']).toBe('restored-model');
     });
   });
 
@@ -350,9 +350,9 @@ describe('Environment Variable Management', () => {
     });
 
     it('should return false when variables are invalid', () => {
-      process.env.OPENAI_API_KEY = 'test-key';
-      process.env.OPENAI_BASE_URL = 'invalid-url';
-      process.env.OPENAI_MODEL = 'gpt-4';
+      process.env['OPENAI_API_KEY'] = 'test-key';
+      process.env['OPENAI_BASE_URL'] = 'invalid-url';
+      process.env['OPENAI_MODEL'] = 'gpt-4';
 
       expect(areEnvironmentVariablesSet()).toBe(false);
     });
@@ -364,33 +364,33 @@ describe('Environment Variable Management', () => {
 
       const status = getEnvironmentVariableStatus();
 
-      expect(status.apiKey.isSet).toBe(true);
-      expect(status.apiKey.isEmpty).toBe(false);
-      expect(status.apiKey.value).toBe('test-api...'); // Masked
+      expect(status['apiKey']!.isSet).toBe(true);
+      expect(status['apiKey']!.isEmpty).toBe(false);
+      expect(status['apiKey']!.value).toBe('test-api...'); // Masked
 
-      expect(status.baseUrl.isSet).toBe(true);
-      expect(status.baseUrl.isEmpty).toBe(false);
-      expect(status.baseUrl.value).toBe('https://api.openai.com/v1');
+      expect(status['baseUrl']!.isSet).toBe(true);
+      expect(status['baseUrl']!.isEmpty).toBe(false);
+      expect(status['baseUrl']!.value).toBe('https://api.openai.com/v1');
 
-      expect(status.model.isSet).toBe(true);
-      expect(status.model.isEmpty).toBe(false);
-      expect(status.model.value).toBe('gpt-4');
+      expect(status['model']!.isSet).toBe(true);
+      expect(status['model']!.isEmpty).toBe(false);
+      expect(status['model']!.value).toBe('gpt-4');
     });
 
     it('should return status for unset variables', () => {
       const status = getEnvironmentVariableStatus();
 
-      expect(status.apiKey.isSet).toBe(false);
-      expect(status.apiKey.isEmpty).toBe(true);
-      expect(status.apiKey.value).toBeUndefined();
+      expect(status['apiKey']!.isSet).toBe(false);
+      expect(status['apiKey']!.isEmpty).toBe(true);
+      expect(status['apiKey']!.value).toBeUndefined();
 
-      expect(status.baseUrl.isSet).toBe(false);
-      expect(status.baseUrl.isEmpty).toBe(true);
-      expect(status.baseUrl.value).toBeUndefined();
+      expect(status['baseUrl']!.isSet).toBe(false);
+      expect(status['baseUrl']!.isEmpty).toBe(true);
+      expect(status['baseUrl']!.value).toBeUndefined();
 
-      expect(status.model.isSet).toBe(false);
-      expect(status.model.isEmpty).toBe(true);
-      expect(status.model.value).toBeUndefined();
+      expect(status['model']!.isSet).toBe(false);
+      expect(status['model']!.isEmpty).toBe(true);
+      expect(status['model']!.value).toBeUndefined();
     });
   });
 
@@ -508,7 +508,7 @@ describe('Environment Variable Management', () => {
       // Restore
       restoreEnvironmentVariables(backup);
       expect(areEnvironmentVariablesSet()).toBe(true);
-      expect(process.env.OPENAI_API_KEY).toBe('test-api-key-12345');
+      expect(process.env['OPENAI_API_KEY']).toBe('test-api-key-12345');
     });
 
     it('should handle multiple provider configurations', () => {
@@ -537,9 +537,9 @@ describe('Environment Variable Management', () => {
       validation = validateEnvironmentVariablesAgainstProvider(azureProvider);
       expect(validation.isValid).toBe(true);
 
-      expect(process.env.OPENAI_API_KEY).toBe('azure-api-key');
-      expect(process.env.OPENAI_BASE_URL).toBe('https://myazure.openai.azure.com/openai');
-      expect(process.env.OPENAI_MODEL).toBe('gpt-35-turbo');
+      expect(process.env['OPENAI_API_KEY']).toBe('azure-api-key');
+      expect(process.env['OPENAI_BASE_URL']).toBe('https://myazure.openai.azure.com/openai');
+      expect(process.env['OPENAI_MODEL']).toBe('gpt-35-turbo');
     });
   });
 });

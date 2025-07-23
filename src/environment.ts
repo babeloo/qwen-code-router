@@ -190,7 +190,7 @@ export function backupEnvironmentVariables(): Partial<EnvironmentVariables> {
  * @param backup - Previously backed up environment variables
  * @returns void
  */
-export function restoreEnvironmentVariables(backup: Partial<EnvironmentVariables>): void {
+export function restoreEnvironmentVariables(backup: { OPENAI_API_KEY?: string | undefined; OPENAI_BASE_URL?: string | undefined; OPENAI_MODEL?: string | undefined }): void {
   // Clear current variables first
   clearEnvironmentVariables();
 
