@@ -338,3 +338,244 @@ export function listPotentialConfigPaths(currentDir?: string): string[] {
   
   return paths;
 }
+
+/**
+ * Saves a configuration file to disk
+ * @param config - Configuration object to save
+ * @param filePath - Path where to save the configuration file
+ * @param format - Format to save in (optional, auto-detected from file extension if not provided)
+ * @returns Promise<void>
+ * @throws Error if file cannot be written
+ */
+export async function saveConfigFile(config: ConfigFile, filePath: string, format?: ConfigFileFormat): Promise<void> {
+  try {
+    // Auto-detect format if not provided
+    const saveFormat = format || detectConfigFileFormat(filePath);
+    
+    // Convert config to string based on format
+    let configContent: string;
+    switch (saveFormat) {
+      case 'yaml':
+        configContent = serializeYamlConfig(config);
+        break;
+      case 'json':
+        configContent = serializeJsonConfig(config);
+        break;
+      default:
+        throw new Error(`Unsupported configuration file format: ${saveFormat}`);
+    }
+
+    // Ensure directory exists
+    const directory = path.dirname(filePath);
+    if (!fs.existsSync(directory)) {
+      fs.mkdirSync(directory, { recursive: true });
+    }
+
+    // Write file with proper permissions
+    fs.writeFileSync(filePath, configContent, { 
+      encoding: 'utf-8',
+      mode: 0o644 // Read/write for owner, read for group and others
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to save configuration file "${filePath}": ${error.message}`);
+    }
+    throw new Error(`Failed to save configuration file "${filePath}": Unknown error`);
+  }
+}
+
+/**
+ * Saves and validates a configuration file
+ * @param config - Configuration object to save
+ * @param filePath - Path where to save the configuration file
+ * @param format - Format to save in (optional, auto-detected from file extension if not provided)
+ * @returns Promise<ValidationResult> - Validation result of the saved configuration
+ */
+export async function saveAndValidateConfigFile(config: ConfigFile, filePath: string, format?: ConfigFileFormat): Promise<ValidationResult> {
+  // Validate before saving
+  const validation = validateConfigFile(config);
+  
+  if (!validation.isValid) {
+    throw new Error(`Cannot save invalid configuration: ${validation.errors.join(', ')}`);
+  }
+
+  // Save the configuration
+  await saveConfigFile(config, filePath, format);
+  
+  return validation;
+}
+
+/**
+ * Updates an existing configuration file while preserving its format
+ * @param config - Updated configuration object
+ * @param originalFilePath - Path to the original configuration file
+ * @param backupOriginal - Whether to create a backup of the original file (default: true)
+ * @returns Promise<void>
+ * @throws Error if original file doesn't exist or cannot be updated
+ */
+export async function updateConfigFile(config: ConfigFile, originalFilePath: string, backupOriginal: boolean = true): Promise<void> {
+  try {
+    // Check if original file exists
+    if (!fs.existsSync(originalFilePath)) {
+      throw new Error(`Original configuration file not found: ${originalFilePath}`);
+    }
+
+    // Create backup if requested
+    if (backupOriginal) {
+      const backupPath = `${originalFilePath}.backup.${Date.now()}`;
+      fs.copyFileSync(originalFilePath, backupPath);
+    }
+
+    // Detect original format and save in the same format
+    const originalFormat = detectConfigFileFormat(originalFilePath);
+    await saveConfigFile(config, originalFilePath, originalFormat);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to update configuration file "${originalFilePath}": ${error.message}`);
+    }
+    throw new Error(`Failed to update configuration file "${originalFilePath}": Unknown error`);
+  }
+}
+
+/**
+ * Serializes configuration to YAML format
+ * @param config - Configuration object to serialize
+ * @returns YAML string representation
+ */
+export function serializeYamlConfig(config: ConfigFile): string {
+  try {
+    return yaml.stringify(config, {
+      indent: 2,
+      lineWidth: 120,
+      minContentWidth: 20
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`YAML serialization error: ${error.message}`);
+    }
+    throw new Error('YAML serialization error: Unknown error');
+  }
+}
+
+/**
+ * Serializes configuration to JSON format
+ * @param config - Configuration object to serialize
+ * @returns JSON string representation
+ */
+export function serializeJsonConfig(config: ConfigFile): string {
+  try {
+    return JSON.stringify(config, null, 2);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`JSON serialization error: ${error.message}`);
+    }
+    throw new Error('JSON serialization error: Unknown error');
+  }
+}
+
+/**
+ * Creates a configuration file with default structure
+ * @param filePath - Path where to create the configuration file
+ * @param format - Format to create (optional, auto-detected from file extension if not provided)
+ * @returns Promise<void>
+ */
+export async function createDefaultConfigFile(filePath: string, format?: ConfigFileFormat): Promise<void> {
+  const defaultConfig: ConfigFile = {
+    configs: [],
+    providers: []
+  };
+
+  await saveConfigFile(defaultConfig, filePath, format);
+}
+
+/**
+ * Safely writes configuration file with atomic operation
+ * Uses temporary file and rename to ensure atomic write operation
+ * @param config - Configuration object to save
+ * @param filePath - Path where to save the configuration file
+ * @param format - Format to save in (optional, auto-detected from file extension if not provided)
+ * @returns Promise<void>
+ */
+export async function atomicSaveConfigFile(config: ConfigFile, filePath: string, format?: ConfigFileFormat): Promise<void> {
+  const tempFilePath = `${filePath}.tmp.${Date.now()}`;
+  
+  try {
+    // Save to temporary file first
+    await saveConfigFile(config, tempFilePath, format);
+    
+    // Atomically move temporary file to final location
+    fs.renameSync(tempFilePath, filePath);
+  } catch (error) {
+    // Clean up temporary file if it exists
+    if (fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+    }
+    
+    if (error instanceof Error) {
+      throw new Error(`Failed to atomically save configuration file "${filePath}": ${error.message}`);
+    }
+    throw new Error(`Failed to atomically save configuration file "${filePath}": Unknown error`);
+  }
+}
+
+/**
+ * Checks if a file path is writable
+ * @param filePath - Path to check
+ * @returns boolean - True if file/directory is writable
+ */
+export function isFileWritable(filePath: string): boolean {
+  try {
+    const directory = path.dirname(filePath);
+    
+    // Check if file exists and is writable
+    if (fs.existsSync(filePath)) {
+      fs.accessSync(filePath, fs.constants.W_OK);
+      return true;
+    }
+    
+    // Check if directory exists and is writable
+    if (fs.existsSync(directory)) {
+      fs.accessSync(directory, fs.constants.W_OK);
+      return true;
+    }
+    
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Gets the recommended configuration file path for saving
+ * @param preferLocal - Whether to prefer local directory over user directory (default: true)
+ * @param format - Preferred format (default: 'yaml')
+ * @returns string - Recommended file path
+ */
+export function getRecommendedConfigPath(preferLocal: boolean = true, format: ConfigFileFormat = 'yaml'): string {
+  const fileName = format === 'yaml' ? 'config.yaml' : 'config.json';
+  
+  if (preferLocal) {
+    const localPath = path.join(process.cwd(), fileName);
+    if (isFileWritable(localPath) || isFileWritable(process.cwd())) {
+      return localPath;
+    }
+  }
+  
+  // Fall back to user directory
+  const userConfigDir = ensureUserConfigDirectory();
+  return path.join(userConfigDir, fileName);
+}
+
+/**
+ * Lists existing configuration files that can be updated
+ * @param currentDir - Current working directory (optional, defaults to process.cwd())
+ * @returns Array of existing configuration file paths
+ */
+export function listExistingConfigFiles(currentDir?: string): string[] {
+  const potentialPaths = listPotentialConfigPaths(currentDir);
+  return potentialPaths.filter(filePath => fs.existsSync(filePath));
+}
