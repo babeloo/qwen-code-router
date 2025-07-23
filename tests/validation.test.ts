@@ -29,15 +29,13 @@ import {
 describe('Configuration Validation', () => {
   // Sample valid configuration for testing
   const validConfigFile: ConfigFile = {
-    default_config: [{ config_name: 'openai-gpt4' }],
+    default_config: [{ name: 'openai-gpt4' }],
     configs: [
       {
-        config_name: 'openai-gpt4',
-        config: [{ provider: 'openai', model: 'gpt-4' }]
-      },
-      {
-        config_name: 'azure-gpt35',
-        config: [{ provider: 'azure', model: 'gpt-35-turbo' }]
+        config: [
+          { name: 'openai-gpt4', provider: 'openai', model: 'gpt-4' },
+          { name: 'azure-gpt35', provider: 'azure', model: 'gpt-35-turbo' }
+        ]
       }
     ],
     providers: [
@@ -114,8 +112,12 @@ describe('Configuration Validation', () => {
       const configWithDuplicates: ConfigFile = {
         ...validConfigFile,
         configs: [
-          { config_name: 'duplicate', config: [{ provider: 'openai', model: 'gpt-4' }] },
-          { config_name: 'duplicate', config: [{ provider: 'azure', model: 'gpt-35-turbo' }] }
+          { 
+            config: [
+              { name: 'duplicate', provider: 'openai', model: 'gpt-4' },
+              { name: 'duplicate', provider: 'azure', model: 'gpt-35-turbo' }
+            ]
+          }
         ]
       };
       
@@ -149,7 +151,7 @@ describe('Configuration Validation', () => {
 
   describe('validateDefaultConfig', () => {
     it('should validate valid default configuration', () => {
-      const defaultConfig = [{ config_name: 'openai-gpt4' }];
+      const defaultConfig = [{ name: 'openai-gpt4' }];
       const configs = validConfigFile.configs;
       
       const result = validateDefaultConfig(defaultConfig, configs);
@@ -174,8 +176,8 @@ describe('Configuration Validation', () => {
 
     it('should warn about multiple default configurations', () => {
       const multipleDefaults = [
-        { config_name: 'config1' },
-        { config_name: 'config2' }
+        { name: 'config1' },
+        { name: 'config2' }
       ];
       
       const result = validateDefaultConfig(multipleDefaults, []);
@@ -183,18 +185,18 @@ describe('Configuration Validation', () => {
       expect(result.warnings).toContain('Multiple default configurations found, only the first will be used');
     });
 
-    it('should reject default configuration with invalid config_name', () => {
-      const invalidDefault = [{ config_name: '' }];
+    it('should reject default configuration with invalid name', () => {
+      const invalidDefault = [{ name: '' }];
       
       const result = validateDefaultConfig(invalidDefault, []);
       
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('default_config config_name cannot be empty');
+      expect(result.errors).toContain('default_config name cannot be empty');
     });
 
     it('should reject default configuration referencing non-existent config', () => {
-      const defaultConfig = [{ config_name: 'non-existent' }];
-      const configs = [{ config_name: 'existing', config: [] }];
+      const defaultConfig = [{ name: 'non-existent' }];
+      const configs = [{ config: [{ name: 'existing', provider: 'openai', model: 'gpt-4' }] }];
       
       const result = validateDefaultConfig(defaultConfig, configs);
       
@@ -206,8 +208,7 @@ describe('Configuration Validation', () => {
   describe('validateConfig', () => {
     it('should validate valid configuration', () => {
       const config: Config = {
-        config_name: 'test-config',
-        config: [{ provider: 'openai', model: 'gpt-4' }]
+        config: [{ name: 'test-config', provider: 'openai', model: 'gpt-4' }]
       };
       
       const result = validateConfig(config, 0);
@@ -223,21 +224,8 @@ describe('Configuration Validation', () => {
       expect(result.errors).toContain('configs[0]: Configuration is null or undefined');
     });
 
-    it('should reject configuration with invalid config_name', () => {
-      const config: Config = {
-        config_name: '',
-        config: [{ provider: 'openai', model: 'gpt-4' }]
-      };
-      
-      const result = validateConfig(config, 0);
-      
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('configs[0]: config_name cannot be empty');
-    });
-
     it('should reject configuration with empty config array', () => {
       const config: Config = {
-        config_name: 'test-config',
         config: []
       };
       
@@ -249,7 +237,6 @@ describe('Configuration Validation', () => {
 
     it('should reject configuration with non-array config', () => {
       const config = {
-        config_name: 'test-config',
         config: 'invalid'
       } as any;
       
@@ -262,7 +249,7 @@ describe('Configuration Validation', () => {
 
   describe('validateConfigEntry', () => {
     it('should validate valid configuration entry', () => {
-      const entry: ConfigEntry = { provider: 'openai', model: 'gpt-4' };
+      const entry: ConfigEntry = { name: 'test-config', provider: 'openai', model: 'gpt-4' };
       
       const result = validateConfigEntry(entry, 'test');
       
@@ -277,8 +264,17 @@ describe('Configuration Validation', () => {
       expect(result.errors).toContain('test: Configuration entry is null or undefined');
     });
 
+    it('should reject entry with empty name', () => {
+      const entry: ConfigEntry = { name: '', provider: 'openai', model: 'gpt-4' };
+      
+      const result = validateConfigEntry(entry, 'test');
+      
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('test: name cannot be empty');
+    });
+
     it('should reject entry with empty provider', () => {
-      const entry: ConfigEntry = { provider: '', model: 'gpt-4' };
+      const entry: ConfigEntry = { name: 'test-config', provider: '', model: 'gpt-4' };
       
       const result = validateConfigEntry(entry, 'test');
       
@@ -287,7 +283,7 @@ describe('Configuration Validation', () => {
     });
 
     it('should reject entry with empty model', () => {
-      const entry: ConfigEntry = { provider: 'openai', model: '' };
+      const entry: ConfigEntry = { name: 'test-config', provider: 'openai', model: '' };
       
       const result = validateConfigEntry(entry, 'test');
       
@@ -462,8 +458,7 @@ describe('Configuration Validation', () => {
     it('should detect reference to non-existent provider', () => {
       const configs: Config[] = [
         {
-          config_name: 'test-config',
-          config: [{ provider: 'non-existent', model: 'gpt-4' }]
+          config: [{ name: 'test-config', provider: 'non-existent', model: 'gpt-4' }]
         }
       ];
       
@@ -476,8 +471,7 @@ describe('Configuration Validation', () => {
     it('should detect reference to non-existent model', () => {
       const configs: Config[] = [
         {
-          config_name: 'test-config',
-          config: [{ provider: 'openai', model: 'non-existent-model' }]
+          config: [{ name: 'test-config', provider: 'openai', model: 'non-existent-model' }]
         }
       ];
       
@@ -498,9 +492,13 @@ describe('Configuration Validation', () => {
 
     it('should detect duplicate configuration names', () => {
       const configs: Config[] = [
-        { config_name: 'duplicate', config: [] },
-        { config_name: 'duplicate', config: [] },
-        { config_name: 'unique', config: [] }
+        { 
+          config: [
+            { name: 'duplicate', provider: 'openai', model: 'gpt-4' },
+            { name: 'duplicate', provider: 'azure', model: 'gpt-35-turbo' },
+            { name: 'unique', provider: 'openai', model: 'gpt-3.5-turbo' }
+          ]
+        }
       ];
       
       const result = validateUniqueConfigNames(configs);
@@ -565,8 +563,7 @@ describe('Configuration Validation', () => {
         ...validConfigFile,
         configs: [
           {
-            config_name: 'invalid-config',
-            config: [{ provider: 'non-existent', model: 'gpt-4' }]
+            config: [{ name: 'invalid-config', provider: 'non-existent', model: 'gpt-4' }]
           }
         ]
       };
@@ -583,12 +580,10 @@ describe('Configuration Validation', () => {
       const mixedConfig: ConfigFile = {
         configs: [
           {
-            config_name: 'valid-config',
-            config: [{ provider: 'openai', model: 'gpt-4' }]
-          },
-          {
-            config_name: '',
-            config: [{ provider: '', model: '' }]
+            config: [
+              { name: 'valid-config', provider: 'openai', model: 'gpt-4' },
+              { name: '', provider: '', model: '' }
+            ]
           }
         ],
         providers: [

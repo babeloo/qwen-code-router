@@ -1,9 +1,9 @@
 default_config:
-  - config_name: openai-gpt4
+  - name: openai-gpt4
 configs:
-  - config_name: openai-gpt4
-    config:
-      - provider: openai
+  - config:
+      - name: openai-gpt4
+        provider: openai
         model: gpt-4
 providers:
   - provider: openai

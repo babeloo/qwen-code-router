@@ -40,6 +40,8 @@ export interface Provider {
  * A single configuration entry that maps a provider to a specific model
  */
 export interface ConfigEntry {
+  /** Unique name for this configuration entry */
+  name: string;
   /** The provider to use for this configuration */
   provider: string;
   /** The specific model to use from the provider */
@@ -47,12 +49,10 @@ export interface ConfigEntry {
 }
 
 /**
- * A named configuration that can contain multiple provider-model pairs
+ * A configuration group that contains multiple named configurations
  */
 export interface Config {
-  /** Unique name for this configuration */
-  config_name: string;
-  /** Array of provider-model configurations */
+  /** Array of named configuration entries */
   config: ConfigEntry[];
 }
 
@@ -61,7 +61,7 @@ export interface Config {
  */
 export interface DefaultConfig {
   /** Name of the configuration to use as default */
-  config_name: string;
+  name: string;
 }
 
 /**

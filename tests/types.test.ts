@@ -89,10 +89,12 @@ describe('Type Definitions', () => {
   describe('ConfigEntry', () => {
     it('should accept valid config entry', () => {
       const configEntry: ConfigEntry = {
+        name: 'openai-gpt4',
         provider: 'openai',
         model: 'gpt-4'
       };
 
+      expect(configEntry.name).toBe('openai-gpt4');
       expect(configEntry.provider).toBe('openai');
       expect(configEntry.model).toBe('gpt-4');
     });
@@ -101,26 +103,25 @@ describe('Type Definitions', () => {
   describe('Config', () => {
     it('should accept valid configuration', () => {
       const config: Config = {
-        config_name: 'openai-gpt4',
         config: [
           {
+            name: 'openai-gpt4',
             provider: 'openai',
             model: 'gpt-4'
           }
         ]
       };
 
-      expect(config.config_name).toBe('openai-gpt4');
       expect(config.config).toHaveLength(1);
+      expect(config.config[0]?.name).toBe('openai-gpt4');
       expect(config.config[0]?.provider).toBe('openai');
     });
 
     it('should support multiple config entries', () => {
       const config: Config = {
-        config_name: 'multi-provider',
         config: [
-          { provider: 'openai', model: 'gpt-4' },
-          { provider: 'azure', model: 'gpt-35-turbo' }
+          { name: 'openai-gpt4', provider: 'openai', model: 'gpt-4' },
+          { name: 'azure-gpt35', provider: 'azure', model: 'gpt-35-turbo' }
         ]
       };
 
@@ -131,21 +132,20 @@ describe('Type Definitions', () => {
   describe('DefaultConfig', () => {
     it('should accept valid default config', () => {
       const defaultConfig: DefaultConfig = {
-        config_name: 'openai-gpt4'
+        name: 'openai-gpt4'
       };
 
-      expect(defaultConfig.config_name).toBe('openai-gpt4');
+      expect(defaultConfig.name).toBe('openai-gpt4');
     });
   });
 
   describe('ConfigFile', () => {
     it('should accept complete configuration file', () => {
       const configFile: ConfigFile = {
-        default_config: [{ config_name: 'openai-gpt4' }],
+        default_config: [{ name: 'openai-gpt4' }],
         configs: [
           {
-            config_name: 'openai-gpt4',
-            config: [{ provider: 'openai', model: 'gpt-4' }]
+            config: [{ name: 'openai-gpt4', provider: 'openai', model: 'gpt-4' }]
           }
         ],
         providers: [
@@ -169,8 +169,7 @@ describe('Type Definitions', () => {
       const configFile: ConfigFile = {
         configs: [
           {
-            config_name: 'test-config',
-            config: [{ provider: 'openai', model: 'gpt-4' }]
+            config: [{ name: 'test-config', provider: 'openai', model: 'gpt-4' }]
           }
         ],
         providers: [
@@ -303,19 +302,13 @@ describe('Type Compatibility', () => {
     // Test that our interfaces match the expected JSON/YAML structure
     const sampleConfigFile: ConfigFile = {
       default_config: [
-        { config_name: 'openai-gpt4' }
+        { name: 'openai-gpt4' }
       ],
       configs: [
         {
-          config_name: 'openai-gpt4',
           config: [
-            { provider: 'openai', model: 'gpt-4' }
-          ]
-        },
-        {
-          config_name: 'azure-gpt35',
-          config: [
-            { provider: 'azure', model: 'gpt-35-turbo' }
+            { name: 'openai-gpt4', provider: 'openai', model: 'gpt-4' },
+            { name: 'azure-gpt35', provider: 'azure', model: 'gpt-35-turbo' }
           ]
         }
       ],
@@ -346,8 +339,9 @@ describe('Type Compatibility', () => {
     };
 
     // Verify structure matches design document examples
-    expect(sampleConfigFile.default_config?.[0]?.config_name).toBe('openai-gpt4');
-    expect(sampleConfigFile.configs).toHaveLength(2);
+    expect(sampleConfigFile.default_config?.[0]?.name).toBe('openai-gpt4');
+    expect(sampleConfigFile.configs).toHaveLength(1);
+    expect(sampleConfigFile.configs[0]?.config).toHaveLength(2);
     expect(sampleConfigFile.providers).toHaveLength(2);
     
     // Verify provider structure

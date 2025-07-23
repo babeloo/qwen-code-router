@@ -118,21 +118,23 @@ export function validateDefaultConfig(defaultConfig: DefaultConfig[], configs: C
   }
 
   const defaultCfg = defaultConfig[0];
-  if (!defaultCfg || typeof defaultCfg.config_name !== 'string') {
-    errors.push('default_config[0] must have a valid config_name string');
+  if (!defaultCfg || typeof defaultCfg.name !== 'string') {
+    errors.push('default_config[0] must have a valid name string');
     return { isValid: false, errors, warnings };
   }
 
-  if (!defaultCfg.config_name.trim()) {
-    errors.push('default_config config_name cannot be empty');
+  if (!defaultCfg.name.trim()) {
+    errors.push('default_config name cannot be empty');
     return { isValid: false, errors, warnings };
   }
 
   // Check if the referenced configuration exists
   if (Array.isArray(configs)) {
-    const configExists = configs.some(cfg => cfg.config_name === defaultCfg.config_name);
+    const configExists = configs.some(cfg => 
+      cfg.config && cfg.config.some(entry => entry.name === defaultCfg.name)
+    );
     if (!configExists) {
-      errors.push(`Default configuration "${defaultCfg.config_name}" does not exist in configs array`);
+      errors.push(`Default configuration "${defaultCfg.name}" does not exist in configs array`);
     }
   }
 
@@ -157,13 +159,6 @@ export function validateConfig(config: Config, index: number): ValidationResult 
   if (!config) {
     errors.push(`${prefix}: Configuration is null or undefined`);
     return { isValid: false, errors, warnings };
-  }
-
-  // Validate config_name
-  if (typeof config.config_name !== 'string') {
-    errors.push(`${prefix}: config_name must be a string`);
-  } else if (!config.config_name.trim()) {
-    errors.push(`${prefix}: config_name cannot be empty`);
   }
 
   // Validate config array
@@ -201,6 +196,13 @@ export function validateConfigEntry(entry: ConfigEntry, prefix: string): Validat
   if (!entry) {
     errors.push(`${prefix}: Configuration entry is null or undefined`);
     return { isValid: false, errors, warnings };
+  }
+
+  // Validate name
+  if (typeof entry.name !== 'string') {
+    errors.push(`${prefix}: name must be a string`);
+  } else if (!entry.name.trim()) {
+    errors.push(`${prefix}: name cannot be empty`);
   }
 
   // Validate provider
@@ -418,9 +420,17 @@ export function validateUniqueConfigNames(configs: Config[]): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const configNames = configs
-    .map(cfg => cfg.config_name)
-    .filter(name => typeof name === 'string');
+  // Collect all configuration entry names from all config groups
+  const configNames: string[] = [];
+  configs.forEach(cfg => {
+    if (Array.isArray(cfg.config)) {
+      cfg.config.forEach(entry => {
+        if (typeof entry.name === 'string') {
+          configNames.push(entry.name);
+        }
+      });
+    }
+  });
 
   const duplicateNames = configNames.filter((name, index) => configNames.indexOf(name) !== index);
   
@@ -476,25 +486,47 @@ export function validateConfigurationByName(configName: string, configFile: Conf
     return { isValid: false, errors, warnings };
   }
 
-  // Find the configuration
-  const config = configFile.configs?.find(cfg => cfg.config_name === configName);
-  if (!config) {
+  // Find the configuration entry by name across all config groups
+  let foundConfigEntry: ConfigEntry | null = null;
+  let foundConfigGroup: Config | null = null;
+  
+  for (const cfg of configFile.configs || []) {
+    if (Array.isArray(cfg.config)) {
+      const entry = cfg.config.find(entry => entry.name === configName);
+      if (entry) {
+        foundConfigEntry = entry;
+        foundConfigGroup = cfg;
+        break;
+      }
+    }
+  }
+  
+  if (!foundConfigEntry || !foundConfigGroup) {
     errors.push(`Configuration "${configName}" not found`);
-    const availableConfigs = configFile.configs?.map(cfg => cfg.config_name).filter(Boolean) || [];
+    const availableConfigs: string[] = [];
+    configFile.configs?.forEach(cfg => {
+      if (Array.isArray(cfg.config)) {
+        cfg.config.forEach(entry => {
+          if (typeof entry.name === 'string') {
+            availableConfigs.push(entry.name);
+          }
+        });
+      }
+    });
     if (availableConfigs.length > 0) {
       errors.push(`Available configurations: ${availableConfigs.join(', ')}`);
     }
     return { isValid: false, errors, warnings };
   }
 
-  // Validate the specific configuration
-  const configResult = validateConfig(config, 0);
+  // Validate the specific configuration group
+  const configResult = validateConfig(foundConfigGroup, 0);
   errors.push(...configResult.errors);
   warnings.push(...configResult.warnings);
 
   // Validate cross-references for this specific configuration
   if (configFile.providers) {
-    const crossValidationResult = validateProviderModelCrossReferences([config], configFile.providers);
+    const crossValidationResult = validateProviderModelCrossReferences([foundConfigGroup], configFile.providers);
     errors.push(...crossValidationResult.errors);
     warnings.push(...crossValidationResult.warnings);
   }
