@@ -7,7 +7,9 @@ import {
   listProviderCommand,
   parseListCommandArgs,
   handleListCommand,
-  ListCommandOptions
+  ListCommandOptions,
+  listBuiltinProviders,
+  BUILTIN_PROVIDERS
 } from '../src/commands';
 import * as persistence from '../src/persistence';
 import { ConfigFile } from '../src/types';
@@ -445,5 +447,328 @@ describe('Error handling for provider commands', () => {
     expect(result.message).toBe('Unexpected error occurred while listing providers');
     expect(result.details).toBe('Unexpected error');
     expect(result.exitCode).toBe(1);
+  });
+});
+// Built-in providers tests
+describe('parseListCommandArgs - Built-in Provider Commands', () => {
+  it('should parse -f flag correctly', () => {
+    const result = parseListCommandArgs(['-f']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.subcommand).toBe('provider');
+    expect(result.options?.builtinProviders).toBe(true);
+  });
+
+  it('should parse -f with provider name', () => {
+    const result = parseListCommandArgs(['-f', 'openai']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.subcommand).toBe('provider');
+    expect(result.options?.builtinProviders).toBe(true);
+    expect(result.options?.provider).toBe('openai');
+  });
+
+  it('should parse -f with verbose flag', () => {
+    const result = parseListCommandArgs(['-f', '-v']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.subcommand).toBe('provider');
+    expect(result.options?.builtinProviders).toBe(true);
+    expect(result.options?.verbose).toBe(true);
+  });
+
+  it('should fail when --all is used with -f flag', () => {
+    const result = parseListCommandArgs(['-f', '--all']);
+    
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('--all flag cannot be used with -f (built-in providers) flag');
+  });
+
+  it('should parse complex -f command', () => {
+    const result = parseListCommandArgs(['-f', 'anthropic', '-v']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.subcommand).toBe('provider');
+    expect(result.options?.builtinProviders).toBe(true);
+    expect(result.options?.provider).toBe('anthropic');
+    expect(result.options?.verbose).toBe(true);
+  });
+});
+
+describe('listBuiltinProviders', () => {
+  it('should list all built-in providers without verbose mode', () => {
+    const result = listBuiltinProviders();
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available built-in providers:');
+    expect(result.details).toContain('openai (OpenAI)');
+    expect(result.details).toContain('azure (Azure OpenAI)');
+    expect(result.details).toContain('anthropic (Anthropic)');
+    expect(result.details).toContain('google (Google AI)');
+    expect(result.details).toContain("Use 'qcr list -f [provider]' to see models for a specific provider.");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should list all built-in providers with verbose mode', () => {
+    const result = listBuiltinProviders({ verbose: true });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available built-in providers:');
+    expect(result.details).toContain('openai (OpenAI) - ');
+    expect(result.details).toContain('models');
+    expect(result.details).toContain('Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('azure (Azure OpenAI) - ');
+    expect(result.details).toContain('Base URL: https://[resource].openai.azure.com/openai');
+    expect(result.details).toContain('anthropic (Anthropic) - ');
+    expect(result.details).toContain('Base URL: https://api.anthropic.com/v1');
+    expect(result.details).toContain('google (Google AI) - ');
+    expect(result.details).toContain('Base URL: https://generativelanguage.googleapis.com/v1');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show models for specific built-in provider - openai', () => {
+    const result = listBuiltinProviders({ provider: 'openai' });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'openai' (OpenAI):");
+    expect(result.details).toContain('gpt-4');
+    expect(result.details).toContain('gpt-4-turbo');
+    expect(result.details).toContain('gpt-3.5-turbo');
+    expect(result.details).not.toContain('claude');
+    expect(result.details).not.toContain('gemini');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show models for specific built-in provider - azure', () => {
+    const result = listBuiltinProviders({ provider: 'azure' });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'azure' (Azure OpenAI):");
+    expect(result.details).toContain('gpt-4');
+    expect(result.details).toContain('gpt-35-turbo');
+    expect(result.details).toContain('gpt-35-turbo-16k');
+    expect(result.details).not.toContain('claude');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show models for specific built-in provider - anthropic', () => {
+    const result = listBuiltinProviders({ provider: 'anthropic' });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'anthropic' (Anthropic):");
+    expect(result.details).toContain('claude-3-opus-20240229');
+    expect(result.details).toContain('claude-3-sonnet-20240229');
+    expect(result.details).toContain('claude-3-haiku-20240307');
+    expect(result.details).toContain('claude-2.1');
+    expect(result.details).not.toContain('gpt');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show models for specific built-in provider - google', () => {
+    const result = listBuiltinProviders({ provider: 'google' });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'google' (Google AI):");
+    expect(result.details).toContain('gemini-pro');
+    expect(result.details).toContain('gemini-pro-vision');
+    expect(result.details).toContain('gemini-1.5-pro');
+    expect(result.details).toContain('gemini-1.5-flash');
+    expect(result.details).not.toContain('gpt');
+    expect(result.details).not.toContain('claude');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show models for specific built-in provider with verbose', () => {
+    const result = listBuiltinProviders({ provider: 'openai', verbose: true });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'openai' (OpenAI):");
+    expect(result.details).toContain('gpt-4');
+    expect(result.details).toContain('Provider details:');
+    expect(result.details).toContain('Name: OpenAI');
+    expect(result.details).toContain('Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('Total models: ');
+  });
+
+  it('should handle case-insensitive built-in provider names', () => {
+    const result = listBuiltinProviders({ provider: 'OPENAI' });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'openai' (OpenAI):");
+    expect(result.details).toContain('gpt-4');
+  });
+
+  it('should fail when built-in provider not found', () => {
+    const result = listBuiltinProviders({ provider: 'nonexistent' });
+    
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("Built-in provider 'nonexistent' not found");
+    expect(result.details).toBe('Available built-in providers: openai, azure, anthropic, google');
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('should handle errors gracefully', () => {
+    // This test verifies error handling in the function
+    const result = listBuiltinProviders({ provider: 'openai' });
+    
+    // Should still work normally since BUILTIN_PROVIDERS is a constant
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('listProviderCommand - Built-in Providers', () => {
+  it('should list built-in providers when -f flag is used', async () => {
+    const options: ListCommandOptions = {
+      subcommand: 'provider',
+      builtinProviders: true
+    };
+
+    const result = await listProviderCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available built-in providers:');
+    expect(result.details).toContain('openai (OpenAI)');
+    expect(result.details).toContain('azure (Azure OpenAI)');
+    expect(result.details).toContain('anthropic (Anthropic)');
+    expect(result.details).toContain('google (Google AI)');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show verbose built-in providers when requested', async () => {
+    const options: ListCommandOptions = {
+      subcommand: 'provider',
+      builtinProviders: true,
+      verbose: true
+    };
+
+    const result = await listProviderCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.details).toContain('Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('Base URL: https://api.anthropic.com/v1');
+  });
+
+  it('should show models for specific built-in provider', async () => {
+    const options: ListCommandOptions = {
+      subcommand: 'provider',
+      builtinProviders: true,
+      provider: 'openai'
+    };
+
+    const result = await listProviderCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'openai' (OpenAI):");
+    expect(result.details).toContain('gpt-4');
+    expect(result.details).toContain('gpt-3.5-turbo');
+  });
+
+  it('should not require configuration file for built-in providers', async () => {
+    // Don't mock discoverAndLoadConfig to simulate no config file
+    mockDiscoverAndLoadConfig.mockRejectedValue(new Error('No configuration file found'));
+
+    const options: ListCommandOptions = {
+      subcommand: 'provider',
+      builtinProviders: true
+    };
+
+    const result = await listProviderCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available built-in providers:');
+    expect(result.details).toContain('openai (OpenAI)');
+  });
+});
+
+describe('handleListCommand - Built-in Provider Integration', () => {
+  it('should handle -f flag', async () => {
+    const result = await handleListCommand(['-f']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available built-in providers:');
+    expect(result.details).toContain('openai (OpenAI)');
+    expect(result.details).toContain('azure (Azure OpenAI)');
+  });
+
+  it('should handle -f with provider name', async () => {
+    const result = await handleListCommand(['-f', 'openai']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'openai' (OpenAI):");
+    expect(result.details).toContain('gpt-4');
+  });
+
+  it('should handle -f with verbose flag', async () => {
+    const result = await handleListCommand(['-f', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.details).toContain('Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('Base URL: https://api.anthropic.com/v1');
+  });
+
+  it('should handle -f with provider name and verbose', async () => {
+    const result = await handleListCommand(['-f', 'anthropic', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Models for built-in provider 'anthropic' (Anthropic):");
+    expect(result.details).toContain('claude-3-opus-20240229');
+    expect(result.details).toContain('Provider details:');
+    expect(result.details).toContain('Name: Anthropic');
+    expect(result.details).toContain('Base URL: https://api.anthropic.com/v1');
+  });
+
+  it('should fail when invalid built-in provider specified', async () => {
+    const result = await handleListCommand(['-f', 'invalid']);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("Built-in provider 'invalid' not found");
+    expect(result.details).toBe('Available built-in providers: openai, azure, anthropic, google');
+  });
+});
+
+describe('BUILTIN_PROVIDERS constant', () => {
+  it('should have all expected providers', () => {
+    expect(BUILTIN_PROVIDERS).toHaveProperty('openai');
+    expect(BUILTIN_PROVIDERS).toHaveProperty('azure');
+    expect(BUILTIN_PROVIDERS).toHaveProperty('anthropic');
+    expect(BUILTIN_PROVIDERS).toHaveProperty('google');
+  });
+
+  it('should have correct structure for each provider', () => {
+    Object.values(BUILTIN_PROVIDERS).forEach(provider => {
+      expect(provider).toHaveProperty('name');
+      expect(provider).toHaveProperty('base_url');
+      expect(provider).toHaveProperty('models');
+      expect(Array.isArray(provider.models)).toBe(true);
+      expect(provider.models.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('should have expected models for OpenAI', () => {
+    const openaiModels = BUILTIN_PROVIDERS.openai.models;
+    expect(openaiModels).toContain('gpt-4');
+    expect(openaiModels).toContain('gpt-3.5-turbo');
+    expect(openaiModels).toContain('gpt-4-turbo');
+  });
+
+  it('should have expected models for Azure', () => {
+    const azureModels = BUILTIN_PROVIDERS.azure.models;
+    expect(azureModels).toContain('gpt-4');
+    expect(azureModels).toContain('gpt-35-turbo');
+    expect(azureModels).toContain('gpt-35-turbo-16k');
+  });
+
+  it('should have expected models for Anthropic', () => {
+    const anthropicModels = BUILTIN_PROVIDERS.anthropic.models;
+    expect(anthropicModels).toContain('claude-3-opus-20240229');
+    expect(anthropicModels).toContain('claude-3-sonnet-20240229');
+    expect(anthropicModels).toContain('claude-2.1');
+  });
+
+  it('should have expected models for Google', () => {
+    const googleModels = BUILTIN_PROVIDERS.google.models;
+    expect(googleModels).toContain('gemini-pro');
+    expect(googleModels).toContain('gemini-1.5-pro');
+    expect(googleModels).toContain('gemini-1.5-flash');
   });
 });

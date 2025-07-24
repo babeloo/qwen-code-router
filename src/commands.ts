@@ -54,7 +54,7 @@ export async function useCommand(options: UseCommandOptions = {}): Promise<Comma
     let config: ConfigFile;
     let validation: any;
     let filePath: string;
-    
+
     try {
       const result = await discoverAndLoadConfig(options.currentDir);
       config = result.config;
@@ -79,7 +79,7 @@ export async function useCommand(options: UseCommandOptions = {}): Promise<Comma
         throw error; // Re-throw unexpected errors
       }
     }
-    
+
     // Check if configuration file is valid
     if (!validation.isValid) {
       return {
@@ -115,7 +115,7 @@ export async function useCommand(options: UseCommandOptions = {}): Promise<Comma
 
     // Resolve the configuration
     const resolutionResult = resolveConfigurationByName(targetConfigName, config);
-    
+
     if (!resolutionResult.success) {
       return {
         success: false,
@@ -140,17 +140,17 @@ export async function useCommand(options: UseCommandOptions = {}): Promise<Comma
     const configSource = useDefault ? 'default configuration' : 'specified configuration';
     const provider = resolutionResult.provider?.provider || 'unknown';
     const model = resolutionResult.configEntry?.model || 'unknown';
-    
+
     let message = `Successfully activated ${configSource} '${targetConfigName}'`;
     let details = `Provider: ${provider}, Model: ${model}`;
-    
+
     if (options.verbose) {
       details += `\nConfiguration file: ${filePath}`;
       details += `\nEnvironment variables set:`;
       details += `\n  OPENAI_API_KEY: ${resolutionResult.environmentVariables?.OPENAI_API_KEY?.substring(0, 8)}...`;
       details += `\n  OPENAI_BASE_URL: ${resolutionResult.environmentVariables?.OPENAI_BASE_URL}`;
       details += `\n  OPENAI_MODEL: ${resolutionResult.environmentVariables?.OPENAI_MODEL}`;
-      
+
       if (envValidation.warnings.length > 0) {
         details += `\nWarnings: ${envValidation.warnings.join(', ')}`;
       }
@@ -223,13 +223,13 @@ DESCRIPTION:
  * @returns CommandResult with configuration list
  */
 export function listConfigurations(
-  configFile: ConfigFile, 
+  configFile: ConfigFile,
   options: { verbose?: boolean } = {}
 ): CommandResult {
   try {
     const configNames = getAllConfigurationNames(configFile);
     const defaultConfig = getCurrentDefaultConfiguration(configFile);
-    
+
     if (configNames.length === 0) {
       return {
         success: true,
@@ -241,17 +241,17 @@ export function listConfigurations(
 
     let message = 'Available configurations:';
     let details = '';
-    
+
     for (const configName of configNames) {
       const isDefault = configName === defaultConfig;
       const marker = isDefault ? ' (default)' : '';
-      
+
       if (options.verbose) {
         // Find the configuration details
         const configEntry = configFile.configs
           .flatMap(c => c.config)
           .find(c => c.name === configName);
-        
+
         if (configEntry) {
           details += `\n  ${configName}${marker} - Provider: ${configEntry.provider}, Model: ${configEntry.model}`;
         } else {
@@ -285,7 +285,7 @@ export function listConfigurations(
 export function getCurrentStatus(): CommandResult {
   try {
     const envValidation = validateEnvironmentVariables();
-    
+
     if (!envValidation.isValid) {
       return {
         success: true,
@@ -340,12 +340,12 @@ export function parseUseCommandArgs(args: string[]): {
 } {
   const options: UseCommandOptions = {};
   let configName: string | undefined;
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     if (!arg) continue; // Skip undefined/empty arguments
-    
+
     if (arg === '-h' || arg === '--help') {
       return { valid: true, showHelp: true };
     } else if (arg === '-v' || arg === '--verbose') {
@@ -366,11 +366,11 @@ export function parseUseCommandArgs(args: string[]): {
       configName = arg;
     }
   }
-  
+
   if (configName !== undefined) {
     options.configName = configName;
   }
-  
+
   return {
     valid: true,
     options
@@ -384,7 +384,7 @@ export function parseUseCommandArgs(args: string[]): {
  */
 export async function handleUseCommand(args: string[]): Promise<CommandResult> {
   const parseResult = parseUseCommandArgs(args);
-  
+
   if (!parseResult.valid) {
     return {
       success: false,
@@ -392,11 +392,11 @@ export async function handleUseCommand(args: string[]): Promise<CommandResult> {
       exitCode: 1
     };
   }
-  
+
   if (parseResult.showHelp) {
     return useCommandHelp();
   }
-  
+
   return await useCommand(parseResult.options);
 }
 
@@ -437,7 +437,7 @@ export async function runCommand(options: RunCommandOptions = {}): Promise<Comma
 
     // Prepare command arguments
     const qwenArgs = options.additionalArgs || [];
-    
+
     if (options.verbose) {
       console.log(`Launching Qwen Code with environment:`);
       console.log(`  OPENAI_API_KEY: ${process.env['OPENAI_API_KEY']?.substring(0, 8)}...`);
@@ -589,12 +589,12 @@ export function parseRunCommandArgs(args: string[]): {
   const options: RunCommandOptions = {
     additionalArgs: []
   };
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     if (!arg) continue; // Skip undefined/empty arguments
-    
+
     if (arg === '-h' || arg === '--help') {
       return { valid: true, showHelp: true };
     } else if (arg === '-v' || arg === '--verbose') {
@@ -604,7 +604,7 @@ export function parseRunCommandArgs(args: string[]): {
       options.additionalArgs!.push(arg);
     }
   }
-  
+
   return {
     valid: true,
     options
@@ -618,7 +618,7 @@ export function parseRunCommandArgs(args: string[]): {
  */
 export async function handleRunCommand(args: string[]): Promise<CommandResult> {
   const parseResult = parseRunCommandArgs(args);
-  
+
   if (!parseResult.valid) {
     return {
       success: false,
@@ -626,11 +626,11 @@ export async function handleRunCommand(args: string[]): Promise<CommandResult> {
       exitCode: 1
     };
   }
-  
+
   if (parseResult.showHelp) {
     return runCommandHelp();
   }
-  
+
   return await runCommand(parseResult.options);
 }
 
@@ -659,7 +659,7 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
     let config: ConfigFile;
     let validation: any;
     let filePath: string;
-    
+
     try {
       const result = await discoverAndLoadConfig(options.currentDir);
       config = result.config;
@@ -684,7 +684,7 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
         throw error; // Re-throw unexpected errors
       }
     }
-    
+
     // Check if configuration file is valid
     if (!validation.isValid) {
       return {
@@ -708,12 +708,12 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
 
     // Get current default configuration
     const currentDefault = getCurrentDefaultConfiguration(config);
-    
+
     // Update the default configuration
     if (!config.default_config) {
       config.default_config = [];
     }
-    
+
     // Clear existing default configurations and set the new one
     config.default_config = [{ name: options.configName }];
 
@@ -732,7 +732,7 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
     // Build success message
     let message = `Successfully set '${options.configName}' as the default configuration`;
     let details = '';
-    
+
     if (currentDefault && currentDefault !== options.configName) {
       details = `Previous default: ${currentDefault}`;
     } else if (!currentDefault) {
@@ -740,7 +740,7 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
     } else {
       details = `'${options.configName}' was already the default configuration`;
     }
-    
+
     if (options.verbose) {
       details += `\nConfiguration file: ${filePath}`;
       details += `\nAvailable configurations: ${availableConfigs.join(', ')}`;
@@ -816,12 +816,12 @@ export function parseSetDefaultCommandArgs(args: string[]): {
 } {
   const options: Partial<SetDefaultCommandOptions> = {};
   let configName: string | undefined;
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     if (!arg) continue; // Skip undefined/empty arguments
-    
+
     if (arg === '-h' || arg === '--help') {
       return { valid: true, showHelp: true };
     } else if (arg === '-v' || arg === '--verbose') {
@@ -842,16 +842,16 @@ export function parseSetDefaultCommandArgs(args: string[]): {
       configName = arg;
     }
   }
-  
+
   if (configName === undefined) {
     return {
       valid: false,
       error: 'Configuration name is required. Use --help for usage information.'
     };
   }
-  
+
   options.configName = configName;
-  
+
   return {
     valid: true,
     options: options as SetDefaultCommandOptions
@@ -865,7 +865,7 @@ export function parseSetDefaultCommandArgs(args: string[]): {
  */
 export async function handleSetDefaultCommand(args: string[]): Promise<CommandResult> {
   const parseResult = parseSetDefaultCommandArgs(args);
-  
+
   if (!parseResult.valid) {
     return {
       success: false,
@@ -873,13 +873,67 @@ export async function handleSetDefaultCommand(args: string[]): Promise<CommandRe
       exitCode: 1
     };
   }
-  
+
   if (parseResult.showHelp) {
     return setDefaultCommandHelp();
   }
-  
+
   return await setDefaultCommand(parseResult.options!);
 }
+
+/**
+ * Built-in provider definitions with their known models
+ */
+export const BUILTIN_PROVIDERS = {
+  openai: {
+    name: 'OpenAI',
+    base_url: 'https://api.openai.com/v1',
+    models: [
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-4-turbo-preview',
+      'gpt-4-0125-preview',
+      'gpt-4-1106-preview',
+      'gpt-3.5-turbo',
+      'gpt-3.5-turbo-0125',
+      'gpt-3.5-turbo-1106',
+      'gpt-3.5-turbo-16k'
+    ]
+  },
+  azure: {
+    name: 'Azure OpenAI',
+    base_url: 'https://[resource].openai.azure.com/openai',
+    models: [
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-4-32k',
+      'gpt-35-turbo',
+      'gpt-35-turbo-16k'
+    ]
+  },
+  anthropic: {
+    name: 'Anthropic',
+    base_url: 'https://api.anthropic.com/v1',
+    models: [
+      'claude-3-opus-20240229',
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307',
+      'claude-2.1',
+      'claude-2.0',
+      'claude-instant-1.2'
+    ]
+  },
+  google: {
+    name: 'Google AI',
+    base_url: 'https://generativelanguage.googleapis.com/v1',
+    models: [
+      'gemini-pro',
+      'gemini-pro-vision',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash'
+    ]
+  }
+} as const;
 
 /**
  * Options for the list command
@@ -897,6 +951,8 @@ export interface ListCommandOptions {
   provider?: string;
   /** Whether to use short form (-p instead of provider) */
   shortForm?: boolean;
+  /** Whether to list built-in providers (-f flag) */
+  builtinProviders?: boolean;
 }
 
 /**
@@ -912,7 +968,7 @@ export async function listConfigCommand(options: ListCommandOptions = {}): Promi
     let config: ConfigFile;
     let validation: any;
     let filePath: string;
-    
+
     try {
       const result = await discoverAndLoadConfig(options.currentDir);
       config = result.config;
@@ -937,7 +993,7 @@ export async function listConfigCommand(options: ListCommandOptions = {}): Promi
         throw error; // Re-throw unexpected errors
       }
     }
-    
+
     // Check if configuration file is valid
     if (!validation.isValid) {
       return {
@@ -950,17 +1006,100 @@ export async function listConfigCommand(options: ListCommandOptions = {}): Promi
 
     // Use the existing listConfigurations function
     const result = listConfigurations(config, { verbose: options.verbose || false });
-    
+
     // Add configuration file path to verbose output
     if (options.verbose && result.success && result.details) {
       result.details += `\n\nConfiguration file: ${filePath}`;
     }
-    
+
     return result;
   } catch (error) {
     return {
       success: false,
       message: 'Unexpected error occurred while listing configurations',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      exitCode: 1
+    };
+  }
+}
+
+/**
+ * Lists built-in providers and their models
+ * @param options - Display options
+ * @returns CommandResult with built-in provider list
+ */
+export function listBuiltinProviders(
+  options: { verbose?: boolean; provider?: string } = {}
+): CommandResult {
+  try {
+    const providerKeys = Object.keys(BUILTIN_PROVIDERS) as (keyof typeof BUILTIN_PROVIDERS)[];
+
+    // If specific provider requested
+    if (options.provider) {
+      const providerKey = providerKeys.find(key =>
+        key.toLowerCase() === options.provider!.toLowerCase()
+      );
+
+      if (!providerKey) {
+        return {
+          success: false,
+          message: `Built-in provider '${options.provider}' not found`,
+          details: `Available built-in providers: ${providerKeys.join(', ')}`,
+          exitCode: 1
+        };
+      }
+
+      const provider = BUILTIN_PROVIDERS[providerKey];
+      let message = `Models for built-in provider '${providerKey}' (${provider.name}):`;
+      let details = '';
+
+      for (const model of provider.models) {
+        details += `\n  ${model}`;
+      }
+
+      if (options.verbose) {
+        details += `\n\nProvider details:`;
+        details += `\n  Name: ${provider.name}`;
+        details += `\n  Base URL: ${provider.base_url}`;
+        details += `\n  Total models: ${provider.models.length}`;
+      }
+
+      return {
+        success: true,
+        message,
+        details: details.trim(),
+        exitCode: 0
+      };
+    }
+
+    // Default: list all built-in providers
+    let message = 'Available built-in providers:';
+    let details = '';
+
+    for (const providerKey of providerKeys) {
+      const provider = BUILTIN_PROVIDERS[providerKey];
+      if (options.verbose) {
+        details += `\n  ${providerKey} (${provider.name}) - ${provider.models.length} models`;
+        details += `\n    Base URL: ${provider.base_url}`;
+      } else {
+        details += `\n  ${providerKey} (${provider.name})`;
+      }
+    }
+
+    if (!options.verbose) {
+      details += `\n\nUse 'qcr list -f [provider]' to see models for a specific provider.`;
+    }
+
+    return {
+      success: true,
+      message,
+      details: details.trim(),
+      exitCode: 0
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Failed to list built-in providers',
       details: error instanceof Error ? error.message : 'Unknown error',
       exitCode: 1
     };
@@ -1002,7 +1141,7 @@ export function listProviders(
 
       let message = `Models for provider '${provider.provider}':`;
       let details = '';
-      
+
       for (const model of provider.env.models) {
         details += `\n  ${model.model}`;
       }
@@ -1073,19 +1212,33 @@ export function listProviders(
 }
 
 /**
- * Implements the 'qcr list provider' and 'qcr list -p' commands
- * Lists providers and their models from configuration file
+ * Implements the 'qcr list provider', 'qcr list -p', and 'qcr list -f' commands
+ * Lists providers and their models from configuration file or built-in providers
  * 
  * @param options - Command options
  * @returns Promise<CommandResult> with provider list
  */
 export async function listProviderCommand(options: ListCommandOptions = {}): Promise<CommandResult> {
   try {
+    // If built-in providers flag is set, use built-in providers
+    if (options.builtinProviders) {
+      const builtinOptions: { verbose?: boolean; provider?: string } = {
+        verbose: options.verbose || false
+      };
+
+      if (options.provider) {
+        builtinOptions.provider = options.provider;
+      }
+
+      return listBuiltinProviders(builtinOptions);
+    }
+
+    // Otherwise, use configuration file providers
     // Discover and load configuration file
     let config: ConfigFile;
     let validation: any;
     let filePath: string;
-    
+
     try {
       const result = await discoverAndLoadConfig(options.currentDir);
       config = result.config;
@@ -1110,7 +1263,7 @@ export async function listProviderCommand(options: ListCommandOptions = {}): Pro
         throw error; // Re-throw unexpected errors
       }
     }
-    
+
     // Check if configuration file is valid
     if (!validation.isValid) {
       return {
@@ -1126,18 +1279,18 @@ export async function listProviderCommand(options: ListCommandOptions = {}): Pro
       verbose: options.verbose || false,
       all: options.all || false
     };
-    
+
     if (options.provider) {
       providerOptions.provider = options.provider;
     }
-    
+
     const result = listProviders(config, providerOptions);
-    
+
     // Add configuration file path to verbose output
     if (options.verbose && result.success && result.details) {
       result.details += `\n\nConfiguration file: ${filePath}`;
     }
-    
+
     return result;
   } catch (error) {
     return {
@@ -1160,25 +1313,29 @@ qcr list - List configurations and providers
 USAGE:
   qcr list <subcommand> [options]
   qcr list -p [options]
+  qcr list -f [provider]
 
 SUBCOMMANDS:
   config                List all available configurations
-  provider              List all available providers
-  -p                    Short form for provider listing
+  provider              List all available providers from configuration file
+  -p                    Short form for provider listing from configuration file
+  -f                    List built-in known providers
 
 OPTIONS:
   -v, --verbose         Show detailed output including provider and model information
   -h, --help           Show this help message
   --all                 Show providers and models in tree structure (with -p)
-  [provider_name]       Show models for specific provider (with -p)
+  [provider_name]       Show models for specific provider (with -p or -f)
 
 EXAMPLES:
   qcr list config              # List all configurations
   qcr list config -v           # List configurations with detailed information
-  qcr list provider            # List all providers
-  qcr list -p                  # List all providers (short form)
+  qcr list provider            # List all providers from configuration file
+  qcr list -p                  # List all providers from configuration file (short form)
   qcr list -p --all            # List providers and models in tree structure
-  qcr list -p openai           # List models for openai provider
+  qcr list -p openai           # List models for openai provider from configuration file
+  qcr list -f                  # List all built-in known providers
+  qcr list -f openai           # List models for built-in openai provider
   qcr list provider -v         # List providers with detailed information
 
 DESCRIPTION:
@@ -1191,6 +1348,9 @@ DESCRIPTION:
   The 'provider' subcommand (or '-p' short form) shows providers from the
   configuration file. Use --all to see a tree structure of providers and
   their models, or specify a provider name to see models for that provider.
+  
+  The '-f' flag shows built-in known providers (OpenAI, Azure, Anthropic, Google)
+  with their predefined models. This doesn't require a configuration file.
   
   Use the verbose option (-v) to see additional details including base URLs
   and model counts for providers.
@@ -1217,19 +1377,23 @@ export function parseListCommandArgs(args: string[]): {
   const options: ListCommandOptions = {};
   let subcommand: string | undefined;
   let providerName: string | undefined;
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     if (!arg) continue; // Skip undefined/empty arguments
-    
+
     if (arg === '-h' || arg === '--help') {
       return { valid: true, showHelp: true };
     } else if (arg === '-v' || arg === '--verbose') {
       options.verbose = true;
     } else if (arg === '-p') {
-      // Short form for provider
+      // Short form for provider (from configuration file)
       options.shortForm = true;
+      subcommand = 'provider';
+    } else if (arg === '-f') {
+      // Built-in providers flag
+      options.builtinProviders = true;
       subcommand = 'provider';
     } else if (arg === '--all') {
       options.all = true;
@@ -1252,7 +1416,7 @@ export function parseListCommandArgs(args: string[]): {
       }
     }
   }
-  
+
   // Validate subcommand
   if (subcommand && !['config', 'provider'].includes(subcommand)) {
     return {
@@ -1260,7 +1424,7 @@ export function parseListCommandArgs(args: string[]): {
       error: `Unknown subcommand: ${subcommand}. Available subcommands: config, provider`
     };
   }
-  
+
   // Validate --all flag usage
   if (options.all && subcommand !== 'provider') {
     return {
@@ -1268,7 +1432,15 @@ export function parseListCommandArgs(args: string[]): {
       error: '--all flag can only be used with provider subcommand'
     };
   }
-  
+
+  // Validate --all flag usage with built-in providers
+  if (options.all && options.builtinProviders) {
+    return {
+      valid: false,
+      error: '--all flag cannot be used with -f (built-in providers) flag'
+    };
+  }
+
   // Validate provider name usage
   if (providerName && subcommand !== 'provider') {
     return {
@@ -1276,15 +1448,15 @@ export function parseListCommandArgs(args: string[]): {
       error: 'Provider name can only be specified with provider subcommand'
     };
   }
-  
+
   if (subcommand !== undefined) {
     options.subcommand = subcommand;
   }
-  
+
   if (providerName !== undefined) {
     options.provider = providerName;
   }
-  
+
   return {
     valid: true,
     options
@@ -1298,7 +1470,7 @@ export function parseListCommandArgs(args: string[]): {
  */
 export async function handleListCommand(args: string[]): Promise<CommandResult> {
   const parseResult = parseListCommandArgs(args);
-  
+
   if (!parseResult.valid) {
     return {
       success: false,
@@ -1306,13 +1478,13 @@ export async function handleListCommand(args: string[]): Promise<CommandResult> 
       exitCode: 1
     };
   }
-  
+
   if (parseResult.showHelp) {
     return listCommandHelp();
   }
-  
+
   const options = parseResult.options!;
-  
+
   // Handle different subcommands
   switch (options.subcommand) {
     case 'config':

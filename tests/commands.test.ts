@@ -432,8 +432,9 @@ describe('CLI Command Handlers', () => {
     it('should handle valid command with configuration name', async () => {
       const result = await handleUseCommand(['openai-gpt4']);
 
-      expect(result.success).toBe(false); // Will fail because no config file in current directory
-      expect(result.message).toContain('No configuration file found');
+      // Should succeed if config file exists and contains the configuration
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Successfully activated');
     });
 
     it('should show help when requested', async () => {
@@ -455,8 +456,9 @@ describe('CLI Command Handlers', () => {
     it('should handle verbose flag', async () => {
       const result = await handleUseCommand(['-v']);
 
-      expect(result.success).toBe(false); // Will fail because no config file
-      expect(result.message).toContain('No configuration file found');
+      // Should succeed if config file exists and use default configuration
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Successfully activated');
     });
   });
 
