@@ -5,6 +5,9 @@ configs:
       - name: openai-gpt4
         provider: openai
         model: gpt-4
+      - name: deepseek-r1
+        provider: deepseek
+        model: deepseek-reasoner
 providers:
   - provider: openai
     env:
@@ -13,3 +16,10 @@ providers:
       models:
         - model: gpt-4
         - model: gpt-3.5-turbo
+  - provider: deepseek
+    env:
+      api_key: YOUR_DEEPSEEK_API_KEY
+      base_url: https://api.deepseek.com
+      models:
+        - model: deepseek-reasoner
+        - model: deepseek-chat

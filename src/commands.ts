@@ -891,6 +891,12 @@ export interface ListCommandOptions {
   verbose?: boolean;
   /** Current working directory (optional - defaults to process.cwd()) */
   currentDir?: string;
+  /** Whether to show all providers and models in tree structure */
+  all?: boolean;
+  /** Specific provider to show models for */
+  provider?: string;
+  /** Whether to use short form (-p instead of provider) */
+  shortForm?: boolean;
 }
 
 /**
@@ -962,6 +968,188 @@ export async function listConfigCommand(options: ListCommandOptions = {}): Promi
 }
 
 /**
+ * Lists all available providers from configuration file
+ * @param configFile - Configuration file to list from
+ * @param options - Display options
+ * @returns CommandResult with provider list
+ */
+export function listProviders(
+  configFile: ConfigFile,
+  options: { verbose?: boolean; all?: boolean; provider?: string } = {}
+): CommandResult {
+  try {
+    if (configFile.providers.length === 0) {
+      return {
+        success: true,
+        message: 'No providers found',
+        details: 'Add providers to your configuration file to get started.',
+        exitCode: 0
+      };
+    }
+
+    // If specific provider requested
+    if (options.provider) {
+      const provider = configFile.providers.find(p => p.provider.toLowerCase() === options.provider!.toLowerCase());
+      if (!provider) {
+        const availableProviders = configFile.providers.map(p => p.provider);
+        return {
+          success: false,
+          message: `Provider '${options.provider}' not found`,
+          details: `Available providers: ${availableProviders.join(', ')}`,
+          exitCode: 1
+        };
+      }
+
+      let message = `Models for provider '${provider.provider}':`;
+      let details = '';
+      
+      for (const model of provider.env.models) {
+        details += `\n  ${model.model}`;
+      }
+
+      if (options.verbose) {
+        details += `\n\nProvider details:`;
+        details += `\n  Base URL: ${provider.env.base_url}`;
+        details += `\n  Total models: ${provider.env.models.length}`;
+      }
+
+      return {
+        success: true,
+        message,
+        details: details.trim(),
+        exitCode: 0
+      };
+    }
+
+    // If --all flag is used, show tree structure
+    if (options.all) {
+      let message = 'Available providers and models:';
+      let details = '';
+
+      for (const provider of configFile.providers) {
+        details += `\n${provider.provider}`;
+        for (const model of provider.env.models) {
+          details += `\n  └─ ${model.model}`;
+        }
+        if (options.verbose) {
+          details += `\n     Base URL: ${provider.env.base_url}`;
+        }
+      }
+
+      return {
+        success: true,
+        message,
+        details: details.trim(),
+        exitCode: 0
+      };
+    }
+
+    // Default: just list provider names
+    let message = 'Available providers:';
+    let details = '';
+
+    for (const provider of configFile.providers) {
+      if (options.verbose) {
+        details += `\n  ${provider.provider} - ${provider.env.models.length} models (${provider.env.base_url})`;
+      } else {
+        details += `\n  ${provider.provider}`;
+      }
+    }
+
+    return {
+      success: true,
+      message,
+      details: details.trim(),
+      exitCode: 0
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Failed to list providers',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      exitCode: 1
+    };
+  }
+}
+
+/**
+ * Implements the 'qcr list provider' and 'qcr list -p' commands
+ * Lists providers and their models from configuration file
+ * 
+ * @param options - Command options
+ * @returns Promise<CommandResult> with provider list
+ */
+export async function listProviderCommand(options: ListCommandOptions = {}): Promise<CommandResult> {
+  try {
+    // Discover and load configuration file
+    let config: ConfigFile;
+    let validation: any;
+    let filePath: string;
+    
+    try {
+      const result = await discoverAndLoadConfig(options.currentDir);
+      config = result.config;
+      validation = result.validation;
+      filePath = result.filePath;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No configuration file found')) {
+        return {
+          success: false,
+          message: 'No configuration file found',
+          details: error.message,
+          exitCode: 1
+        };
+      } else if (error instanceof Error && error.message.includes('Failed to load configuration file')) {
+        return {
+          success: false,
+          message: 'Failed to load configuration file',
+          details: error.message,
+          exitCode: 1
+        };
+      } else {
+        throw error; // Re-throw unexpected errors
+      }
+    }
+    
+    // Check if configuration file is valid
+    if (!validation.isValid) {
+      return {
+        success: false,
+        message: 'Configuration file validation failed',
+        details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
+        exitCode: 1
+      };
+    }
+
+    // Use the listProviders function
+    const providerOptions: { verbose?: boolean; all?: boolean; provider?: string } = {
+      verbose: options.verbose || false,
+      all: options.all || false
+    };
+    
+    if (options.provider) {
+      providerOptions.provider = options.provider;
+    }
+    
+    const result = listProviders(config, providerOptions);
+    
+    // Add configuration file path to verbose output
+    if (options.verbose && result.success && result.details) {
+      result.details += `\n\nConfiguration file: ${filePath}`;
+    }
+    
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Unexpected error occurred while listing providers',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      exitCode: 1
+    };
+  }
+}
+
+/**
  * Shows help information for the list command
  * @returns CommandResult with help information
  */
@@ -971,17 +1159,27 @@ qcr list - List configurations and providers
 
 USAGE:
   qcr list <subcommand> [options]
+  qcr list -p [options]
 
 SUBCOMMANDS:
   config                List all available configurations
+  provider              List all available providers
+  -p                    Short form for provider listing
 
 OPTIONS:
   -v, --verbose         Show detailed output including provider and model information
   -h, --help           Show this help message
+  --all                 Show providers and models in tree structure (with -p)
+  [provider_name]       Show models for specific provider (with -p)
 
 EXAMPLES:
   qcr list config              # List all configurations
   qcr list config -v           # List configurations with detailed information
+  qcr list provider            # List all providers
+  qcr list -p                  # List all providers (short form)
+  qcr list -p --all            # List providers and models in tree structure
+  qcr list -p openai           # List models for openai provider
+  qcr list provider -v         # List providers with detailed information
 
 DESCRIPTION:
   The 'list' command provides various listing capabilities for configurations
@@ -990,8 +1188,12 @@ DESCRIPTION:
   The 'config' subcommand shows all available configurations from the
   configuration file, highlighting the default configuration if one is set.
   
-  Use the verbose option (-v) to see additional details including the
-  provider and model associated with each configuration.
+  The 'provider' subcommand (or '-p' short form) shows providers from the
+  configuration file. Use --all to see a tree structure of providers and
+  their models, or specify a provider name to see models for that provider.
+  
+  Use the verbose option (-v) to see additional details including base URLs
+  and model counts for providers.
 `;
 
   return {
@@ -1014,6 +1216,7 @@ export function parseListCommandArgs(args: string[]): {
 } {
   const options: ListCommandOptions = {};
   let subcommand: string | undefined;
+  let providerName: string | undefined;
   
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -1024,33 +1227,62 @@ export function parseListCommandArgs(args: string[]): {
       return { valid: true, showHelp: true };
     } else if (arg === '-v' || arg === '--verbose') {
       options.verbose = true;
+    } else if (arg === '-p') {
+      // Short form for provider
+      options.shortForm = true;
+      subcommand = 'provider';
+    } else if (arg === '--all') {
+      options.all = true;
     } else if (arg.startsWith('-')) {
       return {
         valid: false,
         error: `Unknown option: ${arg}. Use --help for usage information.`
       };
     } else {
-      // This should be the subcommand
-      if (subcommand !== undefined) {
+      // This could be a subcommand or provider name
+      if (subcommand === undefined) {
+        subcommand = arg;
+      } else if (subcommand === 'provider' && providerName === undefined) {
+        providerName = arg;
+      } else {
         return {
           valid: false,
-          error: `Too many arguments. Expected at most one subcommand, got: ${subcommand}, ${arg}`
+          error: `Too many arguments. Unexpected argument: ${arg}`
         };
       }
-      subcommand = arg;
     }
   }
   
   // Validate subcommand
-  if (subcommand && subcommand !== 'config') {
+  if (subcommand && !['config', 'provider'].includes(subcommand)) {
     return {
       valid: false,
-      error: `Unknown subcommand: ${subcommand}. Available subcommands: config`
+      error: `Unknown subcommand: ${subcommand}. Available subcommands: config, provider`
+    };
+  }
+  
+  // Validate --all flag usage
+  if (options.all && subcommand !== 'provider') {
+    return {
+      valid: false,
+      error: '--all flag can only be used with provider subcommand'
+    };
+  }
+  
+  // Validate provider name usage
+  if (providerName && subcommand !== 'provider') {
+    return {
+      valid: false,
+      error: 'Provider name can only be specified with provider subcommand'
     };
   }
   
   if (subcommand !== undefined) {
     options.subcommand = subcommand;
+  }
+  
+  if (providerName !== undefined) {
+    options.provider = providerName;
   }
   
   return {
@@ -1085,6 +1317,8 @@ export async function handleListCommand(args: string[]): Promise<CommandResult> 
   switch (options.subcommand) {
     case 'config':
       return await listConfigCommand(options);
+    case 'provider':
+      return await listProviderCommand(options);
     case undefined:
       // No subcommand provided, show help
       return listCommandHelp();

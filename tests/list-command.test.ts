@@ -123,14 +123,14 @@ describe('parseListCommandArgs', () => {
     const result = parseListCommandArgs(['unknown']);
     
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('Unknown subcommand: unknown. Available subcommands: config');
+    expect(result.error).toBe('Unknown subcommand: unknown. Available subcommands: config, provider');
   });
 
   it('should fail when too many arguments provided', () => {
     const result = parseListCommandArgs(['config', 'extra']);
     
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('Too many arguments. Expected at most one subcommand, got: config, extra');
+    expect(result.error).toBe('Too many arguments. Unexpected argument: extra');
   });
 
   it('should fail with unknown option', () => {
@@ -355,7 +355,7 @@ describe('handleListCommand', () => {
     const result = await handleListCommand(['config', 'extra']);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Too many arguments. Expected at most one subcommand, got: config, extra');
+    expect(result.message).toBe('Too many arguments. Unexpected argument: extra');
     expect(result.exitCode).toBe(1);
   });
 
@@ -363,7 +363,7 @@ describe('handleListCommand', () => {
     const result = await handleListCommand(['unknown']);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Unknown subcommand: unknown. Available subcommands: config');
+    expect(result.message).toBe('Unknown subcommand: unknown. Available subcommands: config, provider');
     expect(result.exitCode).toBe(1);
   });
 
