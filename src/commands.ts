@@ -10,7 +10,7 @@ import {
   getAllConfigurationNames,
   getCurrentDefaultConfiguration
 } from './resolver';
-import { discoverAndLoadConfig } from './persistence';
+import { discoverAndLoadConfig, saveConfigFile } from './persistence';
 import { validateEnvironmentVariables } from './environment';
 import { ConfigFile } from './types';
 import { spawn, ChildProcess } from 'child_process';
@@ -632,4 +632,251 @@ export async function handleRunCommand(args: string[]): Promise<CommandResult> {
   }
   
   return await runCommand(parseResult.options);
+}
+
+/**
+ * Options for the set-default command
+ */
+export interface SetDefaultCommandOptions {
+  /** Configuration name to set as default */
+  configName: string;
+  /** Current working directory (optional - defaults to process.cwd()) */
+  currentDir?: string;
+  /** Whether to show verbose output */
+  verbose?: boolean;
+}
+
+/**
+ * Implements the 'qcr set-default [config_name]' command
+ * Sets the default configuration in the configuration file
+ * 
+ * @param options - Command options
+ * @returns Promise<CommandResult> with execution status and message
+ */
+export async function setDefaultCommand(options: SetDefaultCommandOptions): Promise<CommandResult> {
+  try {
+    // Discover and load configuration file
+    let config: ConfigFile;
+    let validation: any;
+    let filePath: string;
+    
+    try {
+      const result = await discoverAndLoadConfig(options.currentDir);
+      config = result.config;
+      validation = result.validation;
+      filePath = result.filePath;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No configuration file found')) {
+        return {
+          success: false,
+          message: 'No configuration file found',
+          details: error.message,
+          exitCode: 1
+        };
+      } else if (error instanceof Error && error.message.includes('Failed to load configuration file')) {
+        return {
+          success: false,
+          message: 'Failed to load configuration file',
+          details: error.message,
+          exitCode: 1
+        };
+      } else {
+        throw error; // Re-throw unexpected errors
+      }
+    }
+    
+    // Check if configuration file is valid
+    if (!validation.isValid) {
+      return {
+        success: false,
+        message: 'Configuration file validation failed',
+        details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
+        exitCode: 1
+      };
+    }
+
+    // Validate that the specified configuration exists
+    const availableConfigs = getAllConfigurationNames(config);
+    if (!availableConfigs.includes(options.configName)) {
+      return {
+        success: false,
+        message: `Configuration '${options.configName}' does not exist`,
+        details: `Available configurations: ${availableConfigs.join(', ')}`,
+        exitCode: 1
+      };
+    }
+
+    // Get current default configuration
+    const currentDefault = getCurrentDefaultConfiguration(config);
+    
+    // Update the default configuration
+    if (!config.default_config) {
+      config.default_config = [];
+    }
+    
+    // Clear existing default configurations and set the new one
+    config.default_config = [{ name: options.configName }];
+
+    // Save the updated configuration file
+    try {
+      await saveConfigFile(config, filePath);
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to save configuration file',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        exitCode: 1
+      };
+    }
+
+    // Build success message
+    let message = `Successfully set '${options.configName}' as the default configuration`;
+    let details = '';
+    
+    if (currentDefault && currentDefault !== options.configName) {
+      details = `Previous default: ${currentDefault}`;
+    } else if (!currentDefault) {
+      details = 'No previous default configuration was set';
+    } else {
+      details = `'${options.configName}' was already the default configuration`;
+    }
+    
+    if (options.verbose) {
+      details += `\nConfiguration file: ${filePath}`;
+      details += `\nAvailable configurations: ${availableConfigs.join(', ')}`;
+    }
+
+    return {
+      success: true,
+      message,
+      details,
+      exitCode: 0
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Unexpected error occurred while executing set-default command',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      exitCode: 1
+    };
+  }
+}
+
+/**
+ * Shows help information for the set-default command
+ * @returns CommandResult with help information
+ */
+export function setDefaultCommandHelp(): CommandResult {
+  const helpText = `
+qcr set-default - Set default configuration
+
+USAGE:
+  qcr set-default <config_name>
+
+ARGUMENTS:
+  config_name    Name of the configuration to set as default (required)
+
+OPTIONS:
+  -v, --verbose  Show detailed output including configuration file path
+  -h, --help     Show this help message
+
+EXAMPLES:
+  qcr set-default openai-gpt4    # Set openai-gpt4 as default configuration
+  qcr set-default azure-gpt35 -v # Set azure-gpt35 as default with verbose output
+
+DESCRIPTION:
+  The 'set-default' command sets a configuration as the default configuration
+  in the configuration file. The default configuration will be used when
+  running 'qcr use' without specifying a configuration name.
+  
+  The specified configuration must exist in the configuration file. Use
+  'qcr list config' to see all available configurations.
+  
+  The command updates the configuration file by setting the 'default_config'
+  section to point to the specified configuration name.
+`;
+
+  return {
+    success: true,
+    message: helpText.trim(),
+    exitCode: 0
+  };
+}
+
+/**
+ * Validates command arguments for the set-default command
+ * @param args - Command line arguments
+ * @returns Validation result with parsed options or error
+ */
+export function parseSetDefaultCommandArgs(args: string[]): {
+  valid: boolean;
+  options?: SetDefaultCommandOptions;
+  error?: string;
+  showHelp?: boolean;
+} {
+  const options: Partial<SetDefaultCommandOptions> = {};
+  let configName: string | undefined;
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (!arg) continue; // Skip undefined/empty arguments
+    
+    if (arg === '-h' || arg === '--help') {
+      return { valid: true, showHelp: true };
+    } else if (arg === '-v' || arg === '--verbose') {
+      options.verbose = true;
+    } else if (arg.startsWith('-')) {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}. Use --help for usage information.`
+      };
+    } else {
+      // This should be the configuration name
+      if (configName !== undefined) {
+        return {
+          valid: false,
+          error: `Too many arguments. Expected exactly one configuration name, got: ${configName}, ${arg}`
+        };
+      }
+      configName = arg;
+    }
+  }
+  
+  if (configName === undefined) {
+    return {
+      valid: false,
+      error: 'Configuration name is required. Use --help for usage information.'
+    };
+  }
+  
+  options.configName = configName;
+  
+  return {
+    valid: true,
+    options: options as SetDefaultCommandOptions
+  };
+}
+
+/**
+ * Main entry point for the set-default command from CLI
+ * @param args - Command line arguments (excluding 'qcr set-default')
+ * @returns Promise<CommandResult>
+ */
+export async function handleSetDefaultCommand(args: string[]): Promise<CommandResult> {
+  const parseResult = parseSetDefaultCommandArgs(args);
+  
+  if (!parseResult.valid) {
+    return {
+      success: false,
+      message: parseResult.error || 'Invalid arguments',
+      exitCode: 1
+    };
+  }
+  
+  if (parseResult.showHelp) {
+    return setDefaultCommandHelp();
+  }
+  
+  return await setDefaultCommand(parseResult.options!);
 }
