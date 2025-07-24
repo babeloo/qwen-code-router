@@ -52,3 +52,7 @@ pids
 # Temporary folders
 tmp/
 temp/
+
+# Local configuration files
+config.json
+config.yaml

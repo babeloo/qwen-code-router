@@ -880,3 +880,220 @@ export async function handleSetDefaultCommand(args: string[]): Promise<CommandRe
   
   return await setDefaultCommand(parseResult.options!);
 }
+
+/**
+ * Options for the list command
+ */
+export interface ListCommandOptions {
+  /** Subcommand to execute (config, provider, etc.) */
+  subcommand?: string;
+  /** Whether to show verbose output */
+  verbose?: boolean;
+  /** Current working directory (optional - defaults to process.cwd()) */
+  currentDir?: string;
+}
+
+/**
+ * Implements the 'qcr list config' command
+ * Lists all available configurations with their details
+ * 
+ * @param options - Command options
+ * @returns Promise<CommandResult> with configuration list
+ */
+export async function listConfigCommand(options: ListCommandOptions = {}): Promise<CommandResult> {
+  try {
+    // Discover and load configuration file
+    let config: ConfigFile;
+    let validation: any;
+    let filePath: string;
+    
+    try {
+      const result = await discoverAndLoadConfig(options.currentDir);
+      config = result.config;
+      validation = result.validation;
+      filePath = result.filePath;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('No configuration file found')) {
+        return {
+          success: false,
+          message: 'No configuration file found',
+          details: error.message,
+          exitCode: 1
+        };
+      } else if (error instanceof Error && error.message.includes('Failed to load configuration file')) {
+        return {
+          success: false,
+          message: 'Failed to load configuration file',
+          details: error.message,
+          exitCode: 1
+        };
+      } else {
+        throw error; // Re-throw unexpected errors
+      }
+    }
+    
+    // Check if configuration file is valid
+    if (!validation.isValid) {
+      return {
+        success: false,
+        message: 'Configuration file validation failed',
+        details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
+        exitCode: 1
+      };
+    }
+
+    // Use the existing listConfigurations function
+    const result = listConfigurations(config, { verbose: options.verbose || false });
+    
+    // Add configuration file path to verbose output
+    if (options.verbose && result.success && result.details) {
+      result.details += `\n\nConfiguration file: ${filePath}`;
+    }
+    
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Unexpected error occurred while listing configurations',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      exitCode: 1
+    };
+  }
+}
+
+/**
+ * Shows help information for the list command
+ * @returns CommandResult with help information
+ */
+export function listCommandHelp(): CommandResult {
+  const helpText = `
+qcr list - List configurations and providers
+
+USAGE:
+  qcr list <subcommand> [options]
+
+SUBCOMMANDS:
+  config                List all available configurations
+
+OPTIONS:
+  -v, --verbose         Show detailed output including provider and model information
+  -h, --help           Show this help message
+
+EXAMPLES:
+  qcr list config              # List all configurations
+  qcr list config -v           # List configurations with detailed information
+
+DESCRIPTION:
+  The 'list' command provides various listing capabilities for configurations
+  and providers. Use the appropriate subcommand to list the desired information.
+  
+  The 'config' subcommand shows all available configurations from the
+  configuration file, highlighting the default configuration if one is set.
+  
+  Use the verbose option (-v) to see additional details including the
+  provider and model associated with each configuration.
+`;
+
+  return {
+    success: true,
+    message: helpText.trim(),
+    exitCode: 0
+  };
+}
+
+/**
+ * Validates command arguments for the list command
+ * @param args - Command line arguments
+ * @returns Validation result with parsed options or error
+ */
+export function parseListCommandArgs(args: string[]): {
+  valid: boolean;
+  options?: ListCommandOptions;
+  error?: string;
+  showHelp?: boolean;
+} {
+  const options: ListCommandOptions = {};
+  let subcommand: string | undefined;
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (!arg) continue; // Skip undefined/empty arguments
+    
+    if (arg === '-h' || arg === '--help') {
+      return { valid: true, showHelp: true };
+    } else if (arg === '-v' || arg === '--verbose') {
+      options.verbose = true;
+    } else if (arg.startsWith('-')) {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}. Use --help for usage information.`
+      };
+    } else {
+      // This should be the subcommand
+      if (subcommand !== undefined) {
+        return {
+          valid: false,
+          error: `Too many arguments. Expected at most one subcommand, got: ${subcommand}, ${arg}`
+        };
+      }
+      subcommand = arg;
+    }
+  }
+  
+  // Validate subcommand
+  if (subcommand && subcommand !== 'config') {
+    return {
+      valid: false,
+      error: `Unknown subcommand: ${subcommand}. Available subcommands: config`
+    };
+  }
+  
+  if (subcommand !== undefined) {
+    options.subcommand = subcommand;
+  }
+  
+  return {
+    valid: true,
+    options
+  };
+}
+
+/**
+ * Main entry point for the list command from CLI
+ * @param args - Command line arguments (excluding 'qcr list')
+ * @returns Promise<CommandResult>
+ */
+export async function handleListCommand(args: string[]): Promise<CommandResult> {
+  const parseResult = parseListCommandArgs(args);
+  
+  if (!parseResult.valid) {
+    return {
+      success: false,
+      message: parseResult.error || 'Invalid arguments',
+      exitCode: 1
+    };
+  }
+  
+  if (parseResult.showHelp) {
+    return listCommandHelp();
+  }
+  
+  const options = parseResult.options!;
+  
+  // Handle different subcommands
+  switch (options.subcommand) {
+    case 'config':
+      return await listConfigCommand(options);
+    case undefined:
+      // No subcommand provided, show help
+      return listCommandHelp();
+    default:
+      return {
+        success: false,
+        message: `Unknown subcommand: ${options.subcommand}`,
+        details: 'Use "qcr list --help" to see available subcommands.',
+        exitCode: 1
+      };
+  }
+}

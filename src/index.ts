@@ -1,6 +1,6 @@
 // Main entry point for Qwen Code Router
 export * from './types';
-import { handleUseCommand, handleRunCommand, handleSetDefaultCommand, CommandResult } from './commands';
+import { handleUseCommand, handleRunCommand, handleSetDefaultCommand, handleListCommand, CommandResult } from './commands';
 
 /**
  * Main CLI handler function
@@ -28,6 +28,9 @@ export async function main(): Promise<void> {
         break;
       case 'set-default':
         result = await handleSetDefaultCommand(commandArgs);
+        break;
+      case 'list':
+        result = await handleListCommand(commandArgs);
         break;
       case 'help':
       case '--help':
@@ -78,6 +81,7 @@ COMMANDS:
   use [config_name]     Activate a configuration by name
   run [args...]         Launch Qwen Code with active configuration
   set-default <name>    Set default configuration
+  list <subcommand>     List configurations and providers
   help                  Show this help message
 
 OPTIONS:
