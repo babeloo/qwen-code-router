@@ -871,3 +871,147 @@ describe('BUILTIN_PROVIDERS constant', () => {
     expect(googleModels).toContain('gemini-1.5-flash');
   });
 });
+
+describe('Comprehensive provider listing (task 6.4)', () => {
+  beforeEach(() => {
+    mockDiscoverAndLoadConfig.mockResolvedValue({
+      config: sampleConfig,
+      validation: { isValid: true, errors: [], warnings: [] },
+      filePath: '/test/config.yaml'
+    });
+  });
+
+  it('should list all providers from both config and built-in with --all flag', async () => {
+    const result = await handleListCommand(['provider', '--all']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    
+    // Should contain providers from config file
+    expect(result.details).toContain('openai');
+    expect(result.details).toContain('azure');
+    expect(result.details).toContain('anthropic');
+    
+    // Should contain built-in providers not in config
+    expect(result.details).toContain('google');
+    
+    // Should show models in tree structure
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('  └─ gemini-pro');
+  });
+
+  it('should list all providers from both config and built-in with -p --all', async () => {
+    const result = await handleListCommand(['-p', '--all']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    
+    // Should contain merged providers
+    expect(result.details).toContain('openai');
+    expect(result.details).toContain('google');
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('  └─ gemini-pro');
+  });
+
+  it('should show comprehensive provider list with verbose output', async () => {
+    const result = await handleListCommand(['-p', '--all', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.details).toContain('Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('Source: Configuration + Built-in');
+    expect(result.details).toContain('Source: Built-in');
+  });
+
+  it('should show comprehensive models for specific provider', async () => {
+    const result = await handleListCommand(['provider', '--all', 'openai']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("All available models for provider 'openai':");
+    
+    // Should contain models from both config and built-in
+    expect(result.details).toContain('gpt-4');
+    expect(result.details).toContain('gpt-3.5-turbo');
+    expect(result.details).toContain('gpt-4-turbo'); // From built-in
+  });
+
+  it('should show comprehensive models for specific provider with verbose', async () => {
+    const result = await handleListCommand(['-p', '--all', 'openai', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("All available models for provider 'openai':");
+    expect(result.details).toContain('Provider details:');
+    expect(result.details).toContain('Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('Sources: Configuration file + Built-in definitions');
+  });
+
+  it('should show comprehensive models for built-in only provider', async () => {
+    const result = await handleListCommand(['provider', '--all', 'google']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("All available models for provider 'google':");
+    expect(result.details).toContain('gemini-pro');
+    expect(result.details).toContain('gemini-1.5-pro');
+  });
+
+  it('should show comprehensive models for built-in only provider with verbose', async () => {
+    const result = await handleListCommand(['-p', '--all', 'google', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.details).toContain('Provider details:');
+    expect(result.details).toContain('Base URL: https://generativelanguage.googleapis.com/v1');
+    expect(result.details).toContain('Source: Built-in definitions only');
+  });
+
+  it('should handle case-insensitive provider names in comprehensive mode', async () => {
+    const result = await handleListCommand(['provider', '--all', 'OPENAI']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("All available models for provider 'OPENAI':");
+    expect(result.details).toContain('gpt-4');
+  });
+
+  it('should fail when comprehensive provider not found', async () => {
+    const result = await handleListCommand(['provider', '--all', 'nonexistent']);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("Provider 'nonexistent' not found");
+    expect(result.details).toContain('Available providers: openai, azure, anthropic, google');
+  });
+
+  it('should deduplicate models from config and built-in sources', async () => {
+    const result = await handleListCommand(['provider', '--all', 'openai']);
+
+    expect(result.success).toBe(true);
+    
+    // Count occurrences of gpt-4 (should appear only once despite being in both sources)
+    const gpt4Matches = (result.details || '').match(/gpt-4(?!\-)/g);
+    expect(gpt4Matches?.length).toBe(1);
+  });
+
+  it('should show only config providers without --all flag by default', async () => {
+    const result = await handleListCommand(['provider']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers:');
+    
+    // Should contain only providers from config file
+    expect(result.details).toContain('openai');
+    expect(result.details).toContain('azure');
+    expect(result.details).toContain('anthropic');
+    
+    // Should NOT contain built-in only providers
+    expect(result.details).not.toContain('google');
+    
+    // Should NOT show tree structure by default
+    expect(result.details).not.toContain('└─');
+  });
+
+  it('should show only config providers with verbose info without --all flag', async () => {
+    const result = await handleListCommand(['provider', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.details).toContain('2 models');
+    expect(result.details).not.toContain('[Configuration + Built-in]');
+    expect(result.details).not.toContain('[Built-in]');
+  });
+});
