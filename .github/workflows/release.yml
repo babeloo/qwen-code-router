@@ -56,6 +56,11 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Package as executable
+        run: |
+          pnpm install pkg
+          pnpm pack:win
+
       - name: Create release directory
         run: mkdir -p release
 
@@ -63,6 +68,7 @@ jobs:
         shell: bash
         run: |
           cp -r dist release/
+          cp qcr.exe release/ || echo "qcr.exe not found, skipping"
           cp package.json release/
           cp README.md release/ || echo "README.md not found, skipping"
           cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
@@ -79,23 +85,47 @@ jobs:
       - name: Copy platform-specific scripts (Windows)
         shell: bash
         run: |
+          # Print current directory and list files for debugging
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "Bin directory contents:"
+          ls -la bin/ || echo "Bin directory not found"
+          
           mkdir -p release/bin
+          
+          # Try to copy qcr.bat
           if [ -f "bin/qcr.bat" ]; then
+            echo "Found bin/qcr.bat, copying..."
             cp bin/qcr.bat release/bin/
+          elif [ -f "./bin/qcr.bat" ]; then
+            echo "Found ./bin/qcr.bat, copying..."
+            cp ./bin/qcr.bat release/bin/
           else
-            echo "Warning: bin/qcr.bat not found, creating empty file"
-            touch release/bin/qcr.bat
+            echo "Warning: bin/qcr.bat not found, creating minimal file"
+            echo "@echo off" > release/bin/qcr.bat
+            echo "node \"%~dp0/../dist/cli.js\" %*" >> release/bin/qcr.bat
           fi
           
+          # Try to copy qcr.ps1
           if [ -f "bin/qcr.ps1" ]; then
+            echo "Found bin/qcr.ps1, copying..."
             cp bin/qcr.ps1 release/bin/
+          elif [ -f "./bin/qcr.ps1" ]; then
+            echo "Found ./bin/qcr.ps1, copying..."
+            cp ./bin/qcr.ps1 release/bin/
           else
-            echo "Warning: bin/qcr.ps1 not found, creating empty file"
-            touch release/bin/qcr.ps1
+            echo "Warning: bin/qcr.ps1 not found, creating minimal file"
+            echo 'node "$PSScriptRoot/../dist/cli.js" $args' > release/bin/qcr.ps1
           fi
           
+          # Try to copy install.bat
           if [ -f "install.bat" ]; then
+            echo "Found install.bat, copying..."
             cp install.bat release/
+          elif [ -f "./install.bat" ]; then
+            echo "Found ./install.bat, copying..."
+            cp ./install.bat release/
           else
             echo "Warning: install.bat not found, skipping"
           fi
@@ -113,7 +143,33 @@ jobs:
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
-      - name: Create archive
+      - name: Create single executable archive
+        shell: powershell
+        run: |
+          # Create archive with just the executable file
+          $version = "${{ github.ref_name }}".TrimStart("refs/tags/v")
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ github.event.inputs.version }}".TrimStart("v")
+          }
+          
+          # Create a temporary directory with just the executable
+          mkdir qcr-temp
+          if (Test-Path "qcr.exe") {
+            Copy-Item "qcr.exe" "qcr-temp\"
+          } else {
+            Copy-Item "release\qcr.exe" "qcr-temp\"
+          }
+          
+          # Create the archive with just the executable
+          Compress-Archive -Path "qcr-temp\*" -DestinationPath "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}-executable.${{ env.ARTIFACT_EXT }}"
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-executable
+          path: "*-executable.${{ env.ARTIFACT_EXT }}"
+
+      - name: Create full archive
         shell: powershell
         run: |
           $version = "${{ github.ref_name }}".TrimStart("refs/tags/v")
@@ -122,7 +178,7 @@ jobs:
           }
           Compress-Archive -Path release/* -DestinationPath "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}"
 
-      - name: Upload artifacts
+      - name: Upload full artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PACKAGE_NAME }}
@@ -171,12 +227,18 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Package as executable
+        run: |
+          pnpm install pkg
+          pnpm pack:linux
+
       - name: Create release directory
         run: mkdir -p release
 
       - name: Copy built files
         run: |
           cp -r dist release/
+          cp qcr release/ || echo "qcr executable not found, skipping"
           cp package.json release/
           cp README.md release/ || echo "README.md not found, skipping"
           cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
@@ -210,7 +272,37 @@ jobs:
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
-      - name: Create archive
+      - name: Create single executable archive
+        run: |
+          # Create archive with just the executable file
+          version="${{ github.ref_name }}"
+          version="${version#refs/tags/v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+            version="${version#v}"
+          fi
+          
+          # Create a temporary directory with just the executable
+          mkdir -p qcr-temp
+          if [ -f "qcr" ]; then
+            cp qcr qcr-temp/
+          else
+            cp release/qcr qcr-temp/
+          fi
+          
+          # Make executable
+          chmod +x qcr-temp/qcr
+          
+          # Create the archive with just the executable
+          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}-executable.${{ env.ARTIFACT_EXT }}" -C qcr-temp .
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-executable
+          path: "*-executable.${{ env.ARTIFACT_EXT }}"
+
+      - name: Create full archive
         run: |
           version="${{ github.ref_name }}"
           version="${version#refs/tags/v}"
@@ -220,7 +312,7 @@ jobs:
           fi
           tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}" -C release .
 
-      - name: Upload artifacts
+      - name: Upload full artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PACKAGE_NAME }}
@@ -269,12 +361,18 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Package as executable
+        run: |
+          pnpm install pkg
+          pnpm pack:macos
+
       - name: Create release directory
         run: mkdir -p release
 
       - name: Copy built files
         run: |
           cp -r dist release/
+          cp qcr release/ || echo "qcr executable not found, skipping"
           cp package.json release/
           cp README.md release/ || echo "README.md not found, skipping"
           cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
@@ -308,7 +406,37 @@ jobs:
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
-      - name: Create archive
+      - name: Create single executable archive
+        run: |
+          # Create archive with just the executable file
+          version="${{ github.ref_name }}"
+          version="${version#refs/tags/v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+            version="${version#v}"
+          fi
+          
+          # Create a temporary directory with just the executable
+          mkdir -p qcr-temp
+          if [ -f "qcr" ]; then
+            cp qcr qcr-temp/
+          else
+            cp release/qcr qcr-temp/
+          fi
+          
+          # Make executable
+          chmod +x qcr-temp/qcr
+          
+          # Create the archive with just the executable
+          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}-executable.${{ env.ARTIFACT_EXT }}" -C qcr-temp .
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-executable
+          path: "*-executable.${{ env.ARTIFACT_EXT }}"
+
+      - name: Create full archive
         run: |
           version="${{ github.ref_name }}"
           version="${version#refs/tags/v}"
@@ -318,7 +446,7 @@ jobs:
           fi
           tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}" -C release .
 
-      - name: Upload artifacts
+      - name: Upload full artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PACKAGE_NAME }}
@@ -343,7 +471,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          find artifacts -name "*.zip" -o -name "*.tar.gz" | xargs -I {} cp {} release-assets/
+          find artifacts -name "*.zip" -o -name "*.tar.gz" -o -name "qcr*" -o -name "*-executable.*" | xargs -I {} cp {} release-assets/
           ls -la release-assets/
 
       - name: Get version
