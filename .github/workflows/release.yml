@@ -108,9 +108,9 @@ jobs:
         if: matrix.platform == 'win32'
         shell: powershell
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $version = "${{ github.ref_name }}".TrimStart("refs/tags/v")
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ github.event.inputs.version }}" -replace '^v', ''
+            $version = "${{ github.event.inputs.version }}".TrimStart("v")
           }
           Compress-Archive -Path release/* -DestinationPath "qwen-code-router-$version-${{ matrix.platform }}-${{ matrix.arch }}.zip"
 
@@ -119,7 +119,7 @@ jobs:
         shell: bash
         run: |
           version="${{ github.ref_name }}"
-          version="${version#v}"
+          version="${version#refs/tags/v}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             version="${{ github.event.inputs.version }}"
             version="${version#v}"
@@ -160,17 +160,17 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            ref="${{ github.ref }}"
+            version="${ref#refs/tags/}"
+            echo "version=$version" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: Qwen Code Router ${{ steps.get_version.outputs.version }}
+          name: Qwen Code Router ${{ steps.get_version.outputs.version }}
           body: |
             ## Qwen Code Router ${{ steps.get_version.outputs.version }}
             
@@ -211,14 +211,7 @@ jobs:
             For detailed installation and usage instructions, see the included `INSTALL.md` file.
           draft: false
           prerelease: false
-
-      - name: Upload Release Assets
-        run: |
-          for file in release-assets/*; do
-            if [ -f "$file" ]; then
-              echo "Uploading $file"
-              gh release upload ${{ steps.get_version.outputs.version }} "$file" --clobber
-            fi
-          done
+          files: |
+            release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
