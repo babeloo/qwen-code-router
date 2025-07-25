@@ -226,20 +226,25 @@ export function spawnCrossPlatform(
   let finalCommand = command;
   if (platformInfo.isWindows && useShell && !path.extname(command)) {
     // When using shell on Windows, try common extensions
-    const extensions = ['.cmd', '.bat', '.exe', '.com'];
-    for (const ext of extensions) {
-      const commandWithExt = command + ext;
-      try {
-        // Simple check - if we're using shell, let shell handle it
-        // But we can still try to find the best match
-        const which = require('which');
-        if (which.sync(commandWithExt, { nothrow: true })) {
-          finalCommand = commandWithExt;
+    // For qwen command, prefer .cmd extension on Windows
+    if (command === 'qwen') {
+      finalCommand = 'qwen.cmd';
+    } else {
+      const extensions = ['.cmd', '.bat', '.exe', '.com'];
+      for (const ext of extensions) {
+        const commandWithExt = command + ext;
+        try {
+          // Simple check - if we're using shell, let shell handle it
+          // But we can still try to find the best match
+          const which = require('which');
+          if (which.sync(commandWithExt, { nothrow: true })) {
+            finalCommand = commandWithExt;
+            break;
+          }
+        } catch {
+          // If 'which' is not available, let the shell handle command resolution
           break;
         }
-      } catch {
-        // If 'which' is not available, let the shell handle command resolution
-        break;
       }
     }
   }

@@ -430,11 +430,18 @@ describe('CLI Command Handlers', () => {
 
   describe('handleUseCommand', () => {
     it('should handle valid command with configuration name', async () => {
+      // Set current working directory to tempDir so the command can find the config file
+      const originalCwd = process.cwd;
+      process.cwd = () => tempDir;
+      
       const result = await handleUseCommand(['openai-gpt4']);
 
       // Should succeed if config file exists and contains the configuration
       expect(result.success).toBe(true);
       expect(result.message).toContain('Successfully activated');
+      
+      // Restore original cwd
+      process.cwd = originalCwd;
     });
 
     it('should show help when requested', async () => {
@@ -454,11 +461,18 @@ describe('CLI Command Handlers', () => {
     });
 
     it('should handle verbose flag', async () => {
+      // Set current working directory to tempDir so the command can find the config file
+      const originalCwd = process.cwd;
+      process.cwd = () => tempDir;
+      
       const result = await handleUseCommand(['-v']);
 
       // Should succeed if config file exists and use default configuration
       expect(result.success).toBe(true);
       expect(result.message).toContain('Successfully activated');
+      
+      // Restore original cwd
+      process.cwd = originalCwd;
     });
   });
 
