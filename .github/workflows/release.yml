@@ -12,26 +12,14 @@ on:
         default: 'v1.0.0'
 
 jobs:
-  build-and-release:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            platform: win32
-            arch: x64
-            ext: .exe
-            script_ext: .bat
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-            ext: ''
-            script_ext: ''
-          - os: macos-latest
-            platform: darwin
-            arch: x64
-            ext: ''
-            script_ext: ''
+  build-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      PLATFORM: win32
+      ARCH: x64
+      PACKAGE_NAME: qwen-code-router-win32-x64
+      ARTIFACT_EXT: zip
 
     steps:
       - name: Checkout code
@@ -90,23 +78,12 @@ jobs:
           cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
 
       - name: Copy platform-specific scripts (Windows)
-        if: matrix.platform == 'win32'
         shell: bash
         run: |
           mkdir -p release/bin
           cp bin/qcr.bat release/bin/
           cp bin/qcr.ps1 release/bin/
           cp install.bat release/ || echo "install.bat not found, skipping"
-
-      - name: Copy platform-specific scripts (Unix)
-        if: matrix.platform != 'win32'
-        shell: bash
-        run: |
-          mkdir -p release/bin
-          cp bin/qcr release/bin/
-          chmod +x release/bin/qcr
-          cp install.sh release/ || echo "install.sh not found, skipping"
-          chmod +x release/install.sh || echo "install.sh not found, skipping"
 
       - name: Create platform-specific package
         shell: bash
@@ -115,25 +92,112 @@ jobs:
           # Create platform-specific package.json
           node -e "
             const pkg = require('./package.json');
-            pkg.name = 'qwen-code-router-${{ matrix.platform }}-${{ matrix.arch }}';
-            pkg.os = ['${{ matrix.platform }}'];
-            pkg.cpu = ['${{ matrix.arch }}'];
+            pkg.name = '${{ env.PACKAGE_NAME }}';
+            pkg.os = ['${{ env.PLATFORM }}'];
+            pkg.cpu = ['${{ env.ARCH }}'];
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
-      - name: Create archive (Windows)
-        if: matrix.platform == 'win32'
+      - name: Create archive
         shell: powershell
         run: |
           $version = "${{ github.ref_name }}".TrimStart("refs/tags/v")
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $version = "${{ github.event.inputs.version }}".TrimStart("v")
           }
-          Compress-Archive -Path release/* -DestinationPath "qwen-code-router-$version-${{ matrix.platform }}-${{ matrix.arch }}.zip"
+          Compress-Archive -Path release/* -DestinationPath "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}"
 
-      - name: Create archive (Unix)
-        if: matrix.platform != 'win32'
-        shell: bash
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: "*.${{ env.ARTIFACT_EXT }}"
+
+  build-linux:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      PLATFORM: linux
+      ARCH: x64
+      PACKAGE_NAME: qwen-code-router-linux-x64
+      ARTIFACT_EXT: tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Create release directory
+        run: mkdir -p release
+
+      - name: Copy built files
+        run: |
+          cp -r dist release/
+          cp package.json release/
+          cp README.md release/ || echo "README.md not found, skipping"
+          cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
+          cp LICENSE release/ || echo "LICENSE not found, skipping"
+          cp config.example.yaml release/
+          cp config.example.json release/
+          cp INSTALL.md release/ || echo "INSTALL.md not found, skipping"
+          cp INSTALL.zh-CN.md release/ || echo "INSTALL.zh-CN.md not found, skipping"
+          cp CROSS_PLATFORM_SUMMARY.md release/ || echo "CROSS_PLATFORM_SUMMARY.md not found, skipping"
+          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found, skipping"
+          cp RELEASE_NOTES.md release/ || echo "RELEASE_NOTES.md not found, skipping"
+          cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
+
+      - name: Copy platform-specific scripts (Unix)
+        run: |
+          mkdir -p release/bin
+          cp bin/qcr release/bin/
+          chmod +x release/bin/qcr
+          cp install.sh release/ || echo "install.sh not found, skipping"
+          chmod +x release/install.sh || echo "install.sh not found, skipping"
+
+      - name: Create platform-specific package
+        run: |
+          cd release
+          # Create platform-specific package.json
+          node -e "
+            const pkg = require('./package.json');
+            pkg.name = '${{ env.PACKAGE_NAME }}';
+            pkg.os = ['${{ env.PLATFORM }}'];
+            pkg.cpu = ['${{ env.ARCH }}'];
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Create archive
         run: |
           version="${{ github.ref_name }}"
           version="${version#refs/tags/v}"
@@ -141,21 +205,119 @@ jobs:
             version="${{ github.event.inputs.version }}"
             version="${version#v}"
           fi
-          tar -czf "qwen-code-router-$version-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C release .
+          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}" -C release .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qwen-code-router-${{ matrix.platform }}-${{ matrix.arch }}
-          path: |
-            *.zip
-            *.tar.gz
+          name: ${{ env.PACKAGE_NAME }}
+          path: "*.${{ env.ARTIFACT_EXT }}"
+
+  build-macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    env:
+      PLATFORM: darwin
+      ARCH: x64
+      PACKAGE_NAME: qwen-code-router-darwin-x64
+      ARTIFACT_EXT: tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Create release directory
+        run: mkdir -p release
+
+      - name: Copy built files
+        run: |
+          cp -r dist release/
+          cp package.json release/
+          cp README.md release/ || echo "README.md not found, skipping"
+          cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
+          cp LICENSE release/ || echo "LICENSE not found, skipping"
+          cp config.example.yaml release/
+          cp config.example.json release/
+          cp INSTALL.md release/ || echo "INSTALL.md not found, skipping"
+          cp INSTALL.zh-CN.md release/ || echo "INSTALL.zh-CN.md not found, skipping"
+          cp CROSS_PLATFORM_SUMMARY.md release/ || echo "CROSS_PLATFORM_SUMMARY.md not found, skipping"
+          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found, skipping"
+          cp RELEASE_NOTES.md release/ || echo "RELEASE_NOTES.md not found, skipping"
+          cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
+
+      - name: Copy platform-specific scripts (Unix)
+        run: |
+          mkdir -p release/bin
+          cp bin/qcr release/bin/
+          chmod +x release/bin/qcr
+          cp install.sh release/ || echo "install.sh not found, skipping"
+          chmod +x release/install.sh || echo "install.sh not found, skipping"
+
+      - name: Create platform-specific package
+        run: |
+          cd release
+          # Create platform-specific package.json
+          node -e "
+            const pkg = require('./package.json');
+            pkg.name = '${{ env.PACKAGE_NAME }}';
+            pkg.os = ['${{ env.PLATFORM }}'];
+            pkg.cpu = ['${{ env.ARCH }}'];
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Create archive
+        run: |
+          version="${{ github.ref_name }}"
+          version="${version#refs/tags/v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+            version="${version#v}"
+          fi
+          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}" -C release .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: "*.${{ env.ARTIFACT_EXT }}"
 
   create-release:
-    needs: build-and-release
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    
+    if: always() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch')
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
