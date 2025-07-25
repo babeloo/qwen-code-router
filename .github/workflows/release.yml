@@ -14,13 +14,11 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    continue-on-error: true
     env:
       PLATFORM: win32
       ARCH: x64
       PACKAGE_NAME: qwen-code-router-win32-x64
       ARTIFACT_EXT: zip
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -115,13 +113,11 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       PLATFORM: linux
       ARCH: x64
       PACKAGE_NAME: qwen-code-router-linux-x64
       ARTIFACT_EXT: tar.gz
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -215,13 +211,11 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    continue-on-error: true
     env:
       PLATFORM: darwin
       ARCH: x64
       PACKAGE_NAME: qwen-code-router-darwin-x64
       ARTIFACT_EXT: tar.gz
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
