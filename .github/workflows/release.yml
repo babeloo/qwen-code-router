@@ -363,8 +363,6 @@ jobs:
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Qwen Code Router ${{ steps.get_version.outputs.version }}
-          files: |
-            release-assets/*
           body: |
             ## Qwen Code Router ${{ steps.get_version.outputs.version }}
             
