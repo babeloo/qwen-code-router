@@ -55,19 +55,21 @@ export async function main(): Promise<void> {
     }
     
     // Output result
-    if (result.success) {
+    if (result && result.success) {
       console.log(result.message);
       if (result.details) {
         console.log(result.details);
       }
-    } else {
+    } else if (result) {
       console.error(`Error: ${result.message}`);
       if (result.details) {
         console.error(result.details);
       }
     }
     
-    process.exit(result.exitCode);
+    if (result) {
+      process.exit(result.exitCode);
+    }
   } catch (error) {
     console.error('Unexpected error:', error instanceof Error ? error.message : 'Unknown error');
     process.exit(1);
