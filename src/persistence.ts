@@ -16,6 +16,10 @@ import {
   ValidationResult
 } from './types';
 import { validateConfigFile } from './validation';
+import { 
+  getConfigPaths, 
+  getPlatformInfo
+} from './platform';
 
 /**
  * Configuration file discovery paths and names
@@ -63,29 +67,21 @@ export function discoverConfigFile(directory: string): ConfigDiscoveryResult {
 }
 
 /**
- * Discovers configuration files using hierarchical search
- * Searches in current directory first, then user home directory
+ * Discovers configuration files using hierarchical search with cross-platform support
+ * Searches in current directory first, then platform-specific user directories
  * @param currentDir - Current working directory (optional, defaults to process.cwd())
  * @returns ConfigDiscoveryResult with file path and format information
  */
 export function discoverConfigFileHierarchical(currentDir?: string): ConfigDiscoveryResult {
-  const cwd = currentDir || process.cwd();
+  const configPaths = getConfigPaths(currentDir);
 
-  // 1. Search in current working directory
-  const localResult = discoverConfigFile(cwd);
-  if (localResult.found) {
-    return localResult;
-  }
-
-  // 2. Search in user home directory
-  const homeDir = os.homedir();
-  const userConfigDir = path.join(homeDir, '.qcr');
-  
-  // Check if user config directory exists
-  if (fs.existsSync(userConfigDir)) {
-    const userResult = discoverConfigFile(userConfigDir);
-    if (userResult.found) {
-      return userResult;
+  // Search in all configured paths
+  for (const searchPath of configPaths.searchPaths) {
+    if (fs.existsSync(searchPath)) {
+      const result = discoverConfigFile(searchPath);
+      if (result.found) {
+        return result;
+      }
     }
   }
 
@@ -168,13 +164,11 @@ export async function discoverAndLoadConfig(currentDir?: string): Promise<{
   const discovery = discoverConfigFileHierarchical(currentDir);
   
   if (!discovery.found || !discovery.filePath) {
-    const searchPaths = [
-      currentDir || process.cwd(),
-      path.join(os.homedir(), '.qcr')
-    ];
+    const configPaths = getConfigPaths(currentDir);
     throw new Error(
-      `No configuration file found. Searched in:\n${searchPaths.map(p => `  - ${p}`).join('\n')}\n\n` +
-      `Expected file names: ${[...CONFIG_FILE_NAMES.yaml, ...CONFIG_FILE_NAMES.json].join(', ')}`
+      `No configuration file found. Searched in:\n${configPaths.searchPaths.map(p => `  - ${p}`).join('\n')}\n\n` +
+      `Expected file names: ${[...CONFIG_FILE_NAMES.yaml, ...CONFIG_FILE_NAMES.json].join(', ')}\n\n` +
+      `Platform: ${getPlatformInfo().platform} (${getPlatformInfo().isWindows ? 'Windows' : 'Unix-like'})`
     );
   }
 

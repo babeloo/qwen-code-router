@@ -13,7 +13,8 @@ import {
 import { discoverAndLoadConfig, saveConfigFile } from './persistence';
 import { validateEnvironmentVariables } from './environment';
 import { ConfigFile } from './types';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
+import { spawnCrossPlatform } from './platform';
 
 /**
  * Result of a command execution
@@ -446,12 +447,12 @@ export async function runCommand(options: RunCommandOptions = {}): Promise<Comma
       console.log(`  Command: qwen ${qwenArgs.join(' ')}`);
     }
 
-    // Launch Qwen Code process
+    // Launch Qwen Code process using cross-platform spawning
     return new Promise<CommandResult>((resolve) => {
-      const child: ChildProcess = spawn('qwen', qwenArgs, {
+      const child: ChildProcess = spawnCrossPlatform('qwen', qwenArgs, {
         stdio: 'inherit', // Pass through stdin/stdout/stderr
         env: process.env, // Use current environment (including our set variables)
-        shell: true // Use shell to handle command resolution
+        useShell: true // Use shell to handle command resolution
       });
 
       // Handle process errors
