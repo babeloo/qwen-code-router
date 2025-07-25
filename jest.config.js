@@ -22,5 +22,12 @@ module.exports = {
     'text',
     'lcov',
     'html'
+  ],
+  reporters: [
+    "default", // 保留终端输出
+    ["jest-html-reporter", {
+      pageTitle: "测试报告",
+      outputPath: "test-report.html" // 报告文件路径
+    }]
   ]
 };

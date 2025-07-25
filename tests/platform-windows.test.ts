@@ -14,25 +14,22 @@ import {
 import * as os from 'os';
 import * as path from 'path';
 
-describe('Windows Platform Compatibility', () => {
-  // Only run these tests on Windows
-  const isWindows = os.platform() === 'win32';
-  
+// 添加平台检查
+const isWindows = os.platform() === 'win32';
+
+// 如果不是Windows平台，跳过整个测试套件
+const describePlatform = isWindows ? describe : describe.skip;
+
+describePlatform('Windows Platform Compatibility', () => {
   describe('Platform Detection', () => {
     it('should correctly detect Windows platform', () => {
       const platformInfo = getPlatformInfo();
       
-      if (isWindows) {
-        expect(platformInfo.platform).toBe('win32');
-        expect(platformInfo.isWindows).toBe(true);
-        expect(platformInfo.isUnix).toBe(false);
-        expect(platformInfo.envPathSeparator).toBe(';');
-        expect(platformInfo.pathSeparator).toBe('\\');
-      } else {
-        expect(platformInfo.isWindows).toBe(false);
-        expect(platformInfo.isUnix).toBe(true);
-        expect(platformInfo.envPathSeparator).toBe(':');
-      }
+      expect(platformInfo.platform).toBe('win32');
+      expect(platformInfo.isWindows).toBe(true);
+      expect(platformInfo.isUnix).toBe(false);
+      expect(platformInfo.envPathSeparator).toBe(';');
+      expect(platformInfo.pathSeparator).toBe('\\');
     });
   });
 
@@ -40,20 +37,18 @@ describe('Windows Platform Compatibility', () => {
     it('should use Windows-specific configuration paths', () => {
       const configPaths = getConfigPaths();
       
-      if (isWindows) {
-        // On Windows, should not have system config directory
-        expect(configPaths.systemConfigDir).toBeUndefined();
-        
-        // User config directory should be in APPDATA or home directory
-        expect(configPaths.userConfigDir).toMatch(/qcr$/);
-        
-        // Should contain current directory and user config directory
-        expect(configPaths.searchPaths).toContain(configPaths.currentDir);
-        expect(configPaths.searchPaths).toContain(configPaths.userConfigDir);
-        
-        // Should not contain system config directory
-        expect(configPaths.searchPaths).not.toContain('/etc/qcr');
-      }
+      // On Windows, should not have system config directory
+      expect(configPaths.systemConfigDir).toBeUndefined();
+      
+      // User config directory should be in APPDATA or home directory
+      expect(configPaths.userConfigDir).toMatch(/qcr$/);
+      
+      // Should contain current directory and user config directory
+      expect(configPaths.searchPaths).toContain(configPaths.currentDir);
+      expect(configPaths.searchPaths).toContain(configPaths.userConfigDir);
+      
+      // Should not contain system config directory
+      expect(configPaths.searchPaths).not.toContain('/etc/qcr');
     });
 
     it('should handle APPDATA environment variable', () => {

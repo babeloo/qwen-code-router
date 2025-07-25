@@ -199,10 +199,10 @@ export function spawnCrossPlatform(
 ): ChildProcess {
   const platformInfo = getPlatformInfo();
   
-  // Determine shell usage
+  // Determine shell usage - default to true for better cross-platform compatibility
   const useShell = options.useShell !== undefined 
     ? options.useShell 
-    : platformInfo.isWindows;
+    : true;
   
   // Determine shell
   let shell: string | boolean = false;
@@ -210,7 +210,7 @@ export function spawnCrossPlatform(
     if (typeof options.shell === 'string') {
       shell = options.shell;
     } else if (options.shell === true || options.shell === undefined) {
-      shell = platformInfo.isWindows ? 'cmd.exe' : '/bin/sh';
+      shell = getDefaultShell();
     }
   }
   
@@ -221,22 +221,24 @@ export function spawnCrossPlatform(
     env: options.env || process.env
   };
   
-  // On Windows, handle command extension
+  // On Windows, when using shell, we don't need to modify the command
+  // The shell will handle command resolution
   let finalCommand = command;
-  if (platformInfo.isWindows && !path.extname(command)) {
-    // Try to find the command with common Windows extensions
-    const extensions = ['.exe', '.cmd', '.bat', '.com'];
+  if (platformInfo.isWindows && useShell && !path.extname(command)) {
+    // When using shell on Windows, try common extensions
+    const extensions = ['.cmd', '.bat', '.exe', '.com'];
     for (const ext of extensions) {
       const commandWithExt = command + ext;
       try {
-        // Check if command exists in PATH
+        // Simple check - if we're using shell, let shell handle it
+        // But we can still try to find the best match
         const which = require('which');
         if (which.sync(commandWithExt, { nothrow: true })) {
           finalCommand = commandWithExt;
           break;
         }
       } catch {
-        // Continue with original command if 'which' is not available
+        // If 'which' is not available, let the shell handle command resolution
         break;
       }
     }

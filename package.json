@@ -1,6 +1,6 @@
 {
   "name": "qwen-code-router",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A command-line tool to manage and switch API configurations for different large model service providers when using Qwen Code",
   "main": "dist/index.js",
   "bin": {
@@ -13,7 +13,12 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "clean": "rimraf dist",
-    "prepublishOnly": "pnpm run clean && pnpm run build"
+    "prepublishOnly": "pnpm run clean && pnpm run build",
+    "build:release": "node scripts/build-release.js",
+    "release": "npm run clean && npm run build && npm run build:release",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major"
   },
   "keywords": [
     "qwen",
@@ -28,6 +33,7 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^11.1.0",
+    "jest-html-reporter": "^4.3.0",
     "yaml": "^2.8.0"
   },
   "devDependencies": {

@@ -1,0 +1,224 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-and-release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            ext: .exe
+            script_ext: .bat
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            ext: ''
+            script_ext: ''
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            ext: ''
+            script_ext: ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build project
+        run: npm run build
+
+      - name: Create release directory
+        run: mkdir -p release
+
+      - name: Copy built files
+        shell: bash
+        run: |
+          cp -r dist release/
+          cp package.json release/
+          cp README.md release/ || echo "README.md not found, skipping"
+          cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
+          cp LICENSE release/ || echo "LICENSE not found, skipping"
+          cp config.example.yaml release/
+          cp config.example.json release/
+          cp INSTALL.md release/ || echo "INSTALL.md not found, skipping"
+          cp INSTALL.zh-CN.md release/ || echo "INSTALL.zh-CN.md not found, skipping"
+          cp CROSS_PLATFORM_SUMMARY.md release/ || echo "CROSS_PLATFORM_SUMMARY.md not found, skipping"
+          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found, skipping"
+          cp RELEASE_NOTES.md release/ || echo "RELEASE_NOTES.md not found, skipping"
+          cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
+
+      - name: Copy platform-specific scripts (Windows)
+        if: matrix.platform == 'win32'
+        shell: bash
+        run: |
+          mkdir -p release/bin
+          cp bin/qcr.bat release/bin/
+          cp bin/qcr.ps1 release/bin/
+          cp install.bat release/ || echo "install.bat not found, skipping"
+
+      - name: Copy platform-specific scripts (Unix)
+        if: matrix.platform != 'win32'
+        shell: bash
+        run: |
+          mkdir -p release/bin
+          cp bin/qcr release/bin/
+          chmod +x release/bin/qcr
+          cp install.sh release/ || echo "install.sh not found, skipping"
+          chmod +x release/install.sh || echo "install.sh not found, skipping"
+
+      - name: Create platform-specific package
+        shell: bash
+        run: |
+          cd release
+          # Create platform-specific package.json
+          node -e "
+            const pkg = require('./package.json');
+            pkg.name = 'qwen-code-router-${{ matrix.platform }}-${{ matrix.arch }}';
+            pkg.os = ['${{ matrix.platform }}'];
+            pkg.cpu = ['${{ matrix.arch }}'];
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Create archive (Windows)
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ github.event.inputs.version }}" -replace '^v', ''
+          }
+          Compress-Archive -Path release/* -DestinationPath "qwen-code-router-$version-${{ matrix.platform }}-${{ matrix.arch }}.zip"
+
+      - name: Create archive (Unix)
+        if: matrix.platform != 'win32'
+        shell: bash
+        run: |
+          version="${{ github.ref_name }}"
+          version="${version#v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+            version="${version#v}"
+          fi
+          tar -czf "qwen-code-router-$version-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C release .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-code-router-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            *.zip
+            *.tar.gz
+
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -name "*.zip" -o -name "*.tar.gz" | xargs -I {} cp {} release-assets/
+          ls -la release-assets/
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Qwen Code Router ${{ steps.get_version.outputs.version }}
+          body: |
+            ## Qwen Code Router ${{ steps.get_version.outputs.version }}
+            
+            A command-line tool to manage and switch API configurations for different large model service providers when using Qwen Code.
+            
+            ### Features
+            - ✅ Cross-platform support (Windows, Linux, macOS)
+            - ✅ Multiple provider support (OpenAI, Azure, Anthropic, Google)
+            - ✅ Easy configuration management
+            - ✅ Quick provider/model switching
+            - ✅ Configuration validation
+            
+            ### Downloads
+            Choose the appropriate package for your platform:
+            
+            - **Windows**: `qwen-code-router-*-win32-x64.zip`
+            - **Linux**: `qwen-code-router-*-linux-x64.tar.gz`
+            - **macOS**: `qwen-code-router-*-darwin-x64.tar.gz`
+            
+            ### Installation
+            1. Download the appropriate package for your platform
+            2. Extract the archive
+            3. Run the installation script (`install.bat` for Windows, `install.sh` for Unix)
+            4. Or follow the manual installation instructions in `INSTALL.md`
+            
+            ### Quick Start
+            ```bash
+            # Copy example configuration
+            cp config.example.yaml config.yaml
+            
+            # Edit configuration with your API keys
+            # Then use the tool
+            qcr list config
+            qcr use openai-gpt4
+            qcr run
+            ```
+            
+            For detailed installation and usage instructions, see the included `INSTALL.md` file.
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Assets
+        run: |
+          for file in release-assets/*; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file"
+              gh release upload ${{ steps.get_version.outputs.version }} "$file" --clobber
+            fi
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

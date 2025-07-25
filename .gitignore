@@ -1,15 +1,63 @@
 # Dependencies
 node_modules/
+.npm
+.pnpm
+.yarn
+yarn-error.log*
+pnpm-debug.log*
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
+lerna-debug.log*
 
-# Build output
+# Build outputs
 dist/
 build/
+lib/
+.out
+.storybook-out
+.next
+.nuxt
+.vuepress/dist
 
-# Coverage reports
+# Release files
+release/
+qwen-code-router-*/
+bin/
+*.zip
+*.tar.gz
+*.tgz
+*.7z
+*.dmg
+*.iso
+*.jar
+*.rar
+
+# Test coverage
 coverage/
+.nyc_output/
+.jest/
+test-report.html
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Cache files
+.cache/
+.parcel-cache/
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.node_repl_history
+.eslintcache
+.stylelintcache
 
 # Environment variables
 .env
@@ -17,12 +65,28 @@ coverage/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.test
+.env.production
 
-# IDE files
-.vscode/
+# Configuration files (local/user-specific)
+config.json
+config.yaml
+config.yml
+test-config.json
+test-config.yaml
+test-config.yml
+
+# Editor/IDE files
+.vscode/*
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # OS generated files
 .DS_Store
@@ -32,27 +96,44 @@ coverage/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.AppleDouble
+.LSOverride
+*~
 
-# Logs
-logs
-*.log
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Temporary folders
+# Temporary files
 tmp/
 temp/
+.tmp/
 
-# Local configuration files
-config.json
-config.yaml
+# Backup files
+*.bak
+*.backup
+
+# Serverless
+.serverless/
+
+# Database
+.dynamodb/
+
+# Other
+.fusebox/
+.tern-port
+.vscode-test
+*.tsbuildinfo
+
+# Binary addons
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# Uncomment the public line if your project uses Gatsby
+# https://nextjs.org/blog/next-9-1#public-directory-support
+# https://create-react-app.dev/docs/using-the-public-folder/#docsNav
+# public
+
+# Local development files (not for git)
+RELEASE_GUIDE.md
+RELEASE_NOTES_TEMPLATE.md

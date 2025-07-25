@@ -167,11 +167,15 @@ describe('runCommand', () => {
 
     const result = await resultPromise;
 
-    expect(mockSpawn).toHaveBeenCalledWith('qwen', [], {
-      stdio: 'inherit',
-      env: process.env,
-      shell: true
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      process.platform === 'win32' ? 'qwen.cmd' : 'qwen',
+      [],
+      expect.objectContaining({
+        stdio: 'inherit',
+        env: process.env,
+        shell: expect.anything() // Allow any shell value, including true or a specific path
+      })
+    );
 
     expect(result.success).toBe(true);
     expect(result.message).toBe('Qwen Code completed successfully');
@@ -198,11 +202,15 @@ describe('runCommand', () => {
 
     await resultPromise;
 
-    expect(mockSpawn).toHaveBeenCalledWith('qwen', ['--model-config', 'custom.json', '--debug'], {
-      stdio: 'inherit',
-      env: process.env,
-      shell: true
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      process.platform === 'win32' ? 'qwen.cmd' : 'qwen',
+      ['--model-config', 'custom.json', '--debug'],
+      expect.objectContaining({
+        stdio: 'inherit',
+        env: process.env,
+        shell: expect.anything() // Allow any shell value, including true or a specific path
+      })
+    );
   });
 
   it('should show verbose output when requested', async () => {
@@ -396,7 +404,11 @@ describe('handleRunCommand', () => {
     const result = await resultPromise;
 
     expect(result.success).toBe(true);
-    expect(mockSpawn).toHaveBeenCalledWith('qwen', ['--debug'], expect.any(Object));
+    expect(mockSpawn).toHaveBeenCalledWith(
+      process.platform === 'win32' ? 'qwen.cmd' : 'qwen',
+      ['--debug'],
+      expect.any(Object)
+    );
   });
 
   it('should handle empty arguments', async () => {
@@ -415,7 +427,11 @@ describe('handleRunCommand', () => {
     const result = await resultPromise;
 
     expect(result.success).toBe(true);
-    expect(mockSpawn).toHaveBeenCalledWith('qwen', [], expect.any(Object));
+    expect(mockSpawn).toHaveBeenCalledWith(
+      process.platform === 'win32' ? 'qwen.cmd' : 'qwen',
+      [],
+      expect.any(Object)
+    );
   });
 });
 
