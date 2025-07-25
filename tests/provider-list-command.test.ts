@@ -103,6 +103,23 @@ describe('parseListCommandArgs - Provider Commands', () => {
     expect(result.options?.all).toBe(true);
   });
 
+  it('should parse --tree flag with provider', () => {
+    const result = parseListCommandArgs(['provider', '--tree']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.subcommand).toBe('provider');
+    expect(result.options?.tree).toBe(true);
+  });
+
+  it('should parse --tree flag with -p', () => {
+    const result = parseListCommandArgs(['-p', '--tree']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.subcommand).toBe('provider');
+    expect(result.options?.shortForm).toBe(true);
+    expect(result.options?.tree).toBe(true);
+  });
+
   it('should parse provider name with provider subcommand', () => {
     const result = parseListCommandArgs(['provider', 'openai']);
     
@@ -134,6 +151,20 @@ describe('parseListCommandArgs - Provider Commands', () => {
     
     expect(result.valid).toBe(false);
     expect(result.error).toBe('--all flag can only be used with provider subcommand');
+  });
+
+  it('should fail when --tree is used without provider subcommand', () => {
+    const result = parseListCommandArgs(['config', '--tree']);
+    
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('--tree flag can only be used with provider subcommand');
+  });
+
+  it('should fail when --tree is used with -f flag', () => {
+    const result = parseListCommandArgs(['-f', '--tree']);
+    
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('--tree flag cannot be used with -f (built-in providers) flag');
   });
 
   it('should fail when provider name is used without provider subcommand', () => {
@@ -193,6 +224,33 @@ describe('listProviders', () => {
 
   it('should show tree structure with verbose and --all flags', () => {
     const result = listProviders(sampleConfig, { all: true, verbose: true });
+    
+    expect(result.success).toBe(true);
+    expect(result.details).toContain('openai');
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('     Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('azure');
+    expect(result.details).toContain('     Base URL: https://test.openai.azure.com/openai');
+  });
+
+  it('should show tree structure with --tree flag', () => {
+    const result = listProviders(sampleConfig, { tree: true });
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    expect(result.details).toContain('openai');
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('  └─ gpt-3.5-turbo');
+    expect(result.details).toContain('azure');
+    expect(result.details).toContain('  └─ gpt-35-turbo');
+    expect(result.details).toContain('anthropic');
+    expect(result.details).toContain('  └─ claude-3-opus');
+    expect(result.details).toContain('  └─ claude-3-sonnet');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('should show tree structure with verbose and --tree flags', () => {
+    const result = listProviders(sampleConfig, { tree: true, verbose: true });
     
     expect(result.success).toBe(true);
     expect(result.details).toContain('openai');
@@ -308,6 +366,20 @@ describe('listProviderCommand', () => {
     expect(result.details).toContain('  └─ claude-3-opus');
   });
 
+  it('should show tree structure with --tree flag', async () => {
+    const options: ListCommandOptions = {
+      subcommand: 'provider',
+      tree: true
+    };
+
+    const result = await listProviderCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('  └─ claude-3-opus');
+  });
+
   it('should show models for specific provider', async () => {
     const options: ListCommandOptions = {
       subcommand: 'provider',
@@ -408,6 +480,33 @@ describe('handleListCommand - Provider Integration', () => {
 
   it('should handle complex provider command', async () => {
     const result = await handleListCommand(['-p', '--all', '-v']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('     Base URL: https://api.openai.com/v1');
+    expect(result.details).toContain('Configuration file: /test/config.yaml');
+  });
+
+  it('should handle provider with --tree flag', async () => {
+    const result = await handleListCommand(['provider', '--tree']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    expect(result.details).toContain('  └─ gpt-4');
+    expect(result.details).toContain('  └─ claude-3-opus');
+  });
+
+  it('should handle -p with --tree flag', async () => {
+    const result = await handleListCommand(['-p', '--tree']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Available providers and models:');
+    expect(result.details).toContain('  └─ gpt-4');
+  });
+
+  it('should handle complex provider command with --tree', async () => {
+    const result = await handleListCommand(['-p', '--tree', '-v']);
 
     expect(result.success).toBe(true);
     expect(result.message).toBe('Available providers and models:');

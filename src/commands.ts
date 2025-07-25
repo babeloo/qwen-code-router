@@ -947,6 +947,8 @@ export interface ListCommandOptions {
   currentDir?: string;
   /** Whether to show all providers and models in tree structure */
   all?: boolean;
+  /** Whether to show providers and models in tree structure (--tree flag) */
+  tree?: boolean;
   /** Specific provider to show models for */
   provider?: string;
   /** Whether to use short form (-p instead of provider) */
@@ -1114,7 +1116,7 @@ export function listBuiltinProviders(
  */
 export function listProviders(
   configFile: ConfigFile,
-  options: { verbose?: boolean; all?: boolean; provider?: string } = {}
+  options: { verbose?: boolean; all?: boolean; tree?: boolean; provider?: string; comprehensive?: boolean } = {}
 ): CommandResult {
   try {
     if (configFile.providers.length === 0) {
@@ -1129,6 +1131,75 @@ export function listProviders(
     // If specific provider requested
     if (options.provider) {
       const provider = configFile.providers.find(p => p.provider.toLowerCase() === options.provider!.toLowerCase());
+      
+      // If comprehensive flag is set, merge with built-in providers
+      if (options.comprehensive) {
+        const providerKey = options.provider.toLowerCase();
+        const builtinProvider = BUILTIN_PROVIDERS[providerKey as keyof typeof BUILTIN_PROVIDERS];
+        
+        if (!provider && !builtinProvider) {
+          const availableProviders = [
+            ...configFile.providers.map(p => p.provider),
+            ...Object.keys(BUILTIN_PROVIDERS)
+          ];
+          return {
+            success: false,
+            message: `Provider '${options.provider}' not found`,
+            details: `Available providers: ${[...new Set(availableProviders)].join(', ')}`,
+            exitCode: 1
+          };
+        }
+
+        // Merge models from both sources
+        const allModels = new Set<string>();
+        let baseUrl = '';
+        let providerName = options.provider;
+
+        // Add models from configuration file
+        if (provider) {
+          provider.env.models.forEach(model => allModels.add(model.model));
+          baseUrl = provider.env.base_url;
+          providerName = provider.provider;
+        }
+
+        // Add models from built-in provider
+        if (builtinProvider) {
+          builtinProvider.models.forEach(model => allModels.add(model));
+          if (!baseUrl) {
+            baseUrl = builtinProvider.base_url;
+          }
+        }
+
+        let message = `All available models for provider '${providerName}':`;
+        let details = '';
+
+        const sortedModels = Array.from(allModels).sort();
+        for (const model of sortedModels) {
+          details += `\n  ${model}`;
+        }
+
+        if (options.verbose) {
+          details += `\n\nProvider details:`;
+          details += `\n  Base URL: ${baseUrl}`;
+          details += `\n  Total models: ${sortedModels.length}`;
+          if (provider && builtinProvider) {
+            details += `\n  Sources: Configuration file + Built-in definitions`;
+          } else if (provider) {
+            details += `\n  Source: Configuration file only`;
+          } else {
+            details += `\n  Source: Built-in definitions only`;
+          }
+        }
+
+        return {
+          success: true,
+          message,
+          details: details.trim(),
+          exitCode: 0
+        };
+      }
+
+      // Standard provider listing (configuration file only)
       if (!provider) {
         const availableProviders = configFile.providers.map(p => p.provider);
         return {
@@ -1160,8 +1231,8 @@ export function listProviders(
       };
     }
 
-    // If --all flag is used, show tree structure
-    if (options.all) {
+    // If --all or --tree flag is used, show tree structure
+    if (options.all || options.tree) {
       let message = 'Available providers and models:';
       let details = '';
 
@@ -1275,9 +1346,10 @@ export async function listProviderCommand(options: ListCommandOptions = {}): Pro
     }
 
     // Use the listProviders function
-    const providerOptions: { verbose?: boolean; all?: boolean; provider?: string } = {
+    const providerOptions: { verbose?: boolean; all?: boolean; provider?: string; tree?: boolean } = {
       verbose: options.verbose || false,
-      all: options.all || false
+      all: options.all || false,
+      tree: options.tree || false
     };
 
     if (options.provider) {
@@ -1325,6 +1397,7 @@ OPTIONS:
   -v, --verbose         Show detailed output including provider and model information
   -h, --help           Show this help message
   --all                 Show providers and models in tree structure (with -p)
+  --tree                Show providers and models in tree structure (with provider)
   [provider_name]       Show models for specific provider (with -p or -f)
 
 EXAMPLES:
@@ -1333,6 +1406,7 @@ EXAMPLES:
   qcr list provider            # List all providers from configuration file
   qcr list -p                  # List all providers from configuration file (short form)
   qcr list -p --all            # List providers and models in tree structure
+  qcr list provider --tree     # List providers and models in tree structure
   qcr list -p openai           # List models for openai provider from configuration file
   qcr list -f                  # List all built-in known providers
   qcr list -f openai           # List models for built-in openai provider
@@ -1346,7 +1420,7 @@ DESCRIPTION:
   configuration file, highlighting the default configuration if one is set.
   
   The 'provider' subcommand (or '-p' short form) shows providers from the
-  configuration file. Use --all to see a tree structure of providers and
+  configuration file. Use --all or --tree to see a tree structure of providers and
   their models, or specify a provider name to see models for that provider.
   
   The '-f' flag shows built-in known providers (OpenAI, Azure, Anthropic, Google)
@@ -1397,6 +1471,8 @@ export function parseListCommandArgs(args: string[]): {
       subcommand = 'provider';
     } else if (arg === '--all') {
       options.all = true;
+    } else if (arg === '--tree') {
+      options.tree = true;
     } else if (arg.startsWith('-')) {
       return {
         valid: false,
@@ -1433,11 +1509,27 @@ export function parseListCommandArgs(args: string[]): {
     };
   }
 
+  // Validate --tree flag usage
+  if (options.tree && subcommand !== 'provider') {
+    return {
+      valid: false,
+      error: '--tree flag can only be used with provider subcommand'
+    };
+  }
+
   // Validate --all flag usage with built-in providers
   if (options.all && options.builtinProviders) {
     return {
       valid: false,
       error: '--all flag cannot be used with -f (built-in providers) flag'
+    };
+  }
+
+  // Validate --tree flag usage with built-in providers
+  if (options.tree && options.builtinProviders) {
+    return {
+      valid: false,
+      error: '--tree flag cannot be used with -f (built-in providers) flag'
     };
   }
 
