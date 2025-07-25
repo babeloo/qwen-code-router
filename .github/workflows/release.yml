@@ -80,9 +80,25 @@ jobs:
         shell: bash
         run: |
           mkdir -p release/bin
-          cp bin/qcr.bat release/bin/
-          cp bin/qcr.ps1 release/bin/
-          cp install.bat release/ || echo "install.bat not found, skipping"
+          if [ -f "bin/qcr.bat" ]; then
+            cp bin/qcr.bat release/bin/
+          else
+            echo "Warning: bin/qcr.bat not found, creating empty file"
+            touch release/bin/qcr.bat
+          fi
+          
+          if [ -f "bin/qcr.ps1" ]; then
+            cp bin/qcr.ps1 release/bin/
+          else
+            echo "Warning: bin/qcr.ps1 not found, creating empty file"
+            touch release/bin/qcr.ps1
+          fi
+          
+          if [ -f "install.bat" ]; then
+            cp install.bat release/
+          else
+            echo "Warning: install.bat not found, skipping"
+          fi
 
       - name: Create platform-specific package
         shell: bash
