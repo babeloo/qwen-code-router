@@ -24,8 +24,8 @@ A command-line tool to manage and switch API configurations for different large 
    - macOS: `qwen-code-router-*-darwin-x64.tar.gz`
 3. Extract the archive
 4. Run the installation script:
-   - Windows: `install.bat`
-   - Unix/Linux/macOS: `./install.sh`
+   - Windows: `scripts/install.bat` or `install.bat` (from extracted package)
+   - Unix/Linux/macOS: `scripts/install.sh` or `./install.sh` (from extracted package)
 
 #### Option 2: NPM Global Installation
 ```bash

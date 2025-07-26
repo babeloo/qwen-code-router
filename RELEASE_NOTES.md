@@ -1,4 +1,28 @@
-# Qwen Code Router v0.1.0 Release Notes
+# Qwen Code Router Release Notes
+
+## Version 0.1.1 - 2025-01-26
+
+### 🔧 Improvements
+- ✅ **Enhanced packaging system** - Improved automated packaging for GitHub platform
+- ✅ **Directory structure optimization** - Better organization of executables and documentation
+- ✅ **Parallel build execution** - Platform builds run in parallel without blocking
+- ✅ **Robust error handling** - Platform failures don't block other builds
+- ✅ **Dual package types** - Both full packages and executable-only packages
+- ✅ **Windows test environment** - Test job now runs on Windows to match development environment
+
+### 🏗️ Infrastructure
+- 🚀 **Enhanced GitHub Actions workflow** - Improved CI/CD with better error handling
+- 📦 **Executable organization** - All compiled executables now placed in `bin/` directory
+- 📚 **Documentation restructure** - Development docs moved to `docs/` directory
+- 🔧 **Installation scripts** - Moved to `scripts/` directory for better organization
+- 🧪 **Local testing** - Added comprehensive packaging test script
+
+### 🐛 Bug Fixes
+- ✅ **Path resolution** - Fixed absolute directory creation issue
+- ✅ **Workflow duplication** - Removed duplicate release workflows
+- ✅ **File organization** - Proper separation of source and build artifacts
+
+---
 
 ## Version 0.1.0 - 2025-01-25
 

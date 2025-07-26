@@ -5,9 +5,13 @@ const path = require('path');
 const { execSync } = require('child_process');
 const os = require('os');
 
+// Get version from package.json
+const packageJsonPath = path.join(__dirname, '..', 'package.json');
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
 const platform = os.platform();
 const arch = os.arch();
-const version = process.env.VERSION || '0.1.0';
+const version = process.env.VERSION || packageJson.version;
 
 console.log(`Building release for ${platform}-${arch} version ${version}`);
 
@@ -43,7 +47,7 @@ const filesToCopy = [
 filesToCopy.forEach(file => {
   const srcPath = path.join(__dirname, '..', file);
   const destPath = path.join(releaseDir, file);
-  
+
   if (fs.existsSync(srcPath)) {
     if (fs.statSync(srcPath).isDirectory()) {
       fs.cpSync(srcPath, destPath, { recursive: true });
@@ -71,7 +75,7 @@ if (platform === 'win32') {
       console.log(`Copied ${script}`);
     }
   });
-  
+
   // Copy install script
   const installScript = path.join(__dirname, '..', 'install.bat');
   if (fs.existsSync(installScript)) {
@@ -87,7 +91,7 @@ if (platform === 'win32') {
     fs.chmodSync(destPath, '755');
     console.log('Copied qcr (Unix script)');
   }
-  
+
   // Copy install script
   const installScript = path.join(__dirname, '..', 'install.sh');
   if (fs.existsSync(installScript)) {
@@ -99,15 +103,15 @@ if (platform === 'win32') {
 }
 
 // Create platform-specific package.json
-const packageJson = JSON.parse(fs.readFileSync(path.join(releaseDir, 'package.json'), 'utf8'));
-packageJson.name = `qwen-code-router-${platform}-${arch}`;
-packageJson.version = version;
-packageJson.os = [platform];
-packageJson.cpu = [arch];
+const releasePackageJson = JSON.parse(fs.readFileSync(path.join(releaseDir, 'package.json'), 'utf8'));
+releasePackageJson.name = `qwen-code-router-${platform}-${arch}`;
+releasePackageJson.version = version;
+releasePackageJson.os = [platform];
+releasePackageJson.cpu = [arch];
 
 fs.writeFileSync(
   path.join(releaseDir, 'package.json'),
-  JSON.stringify(packageJson, null, 2)
+  JSON.stringify(releasePackageJson, null, 2)
 );
 
 console.log('Updated package.json for platform');

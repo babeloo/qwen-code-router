@@ -12,13 +12,9 @@ on:
         default: 'v1.0.0'
 
 jobs:
-  build-windows:
+  # Test job to ensure quality before release
+  test:
     runs-on: windows-latest
-    env:
-      PLATFORM: win32
-      ARCH: x64
-      PACKAGE_NAME: qwen-code-router-win32-x64
-      ARTIFACT_EXT: zip
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,18 +22,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Get pnpm store directory
         id: pnpm-cache
         shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
         uses: actions/cache@v4
@@ -56,141 +51,122 @@ jobs:
       - name: Build project
         run: pnpm build
 
-      - name: Package as executable
-        run: |
-          pnpm install pkg
-          pnpm pack:win
+  # Parallel build jobs for each platform
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    continue-on-error: true  # Don't fail other platforms if this fails
+    outputs:
+      success: ${{ steps.build.outcome == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Create release directory
-        run: mkdir -p release
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Copy built files
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and package for Windows
+        id: build
         shell: bash
         run: |
-          cp -r dist release/
-          cp qcr.exe release/ || echo "qcr.exe not found, skipping"
-          cp package.json release/
-          cp README.md release/ || echo "README.md not found, skipping"
-          cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
-          cp LICENSE release/ || echo "LICENSE not found, skipping"
-          cp config.example.yaml release/
-          cp config.example.json release/
-          cp INSTALL.md release/ || echo "INSTALL.md not found, skipping"
-          cp INSTALL.zh-CN.md release/ || echo "INSTALL.zh-CN.md not found, skipping"
-          cp CROSS_PLATFORM_SUMMARY.md release/ || echo "CROSS_PLATFORM_SUMMARY.md not found, skipping"
-          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found, skipping"
-          cp RELEASE_NOTES.md release/ || echo "RELEASE_NOTES.md not found, skipping"
-          cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
-
-      - name: Copy platform-specific scripts (Windows)
-        shell: bash
-        run: |
-          # Print current directory and list files for debugging
-          echo "Current directory: $(pwd)"
-          echo "Directory contents:"
-          ls -la
-          echo "Bin directory contents:"
-          ls -la bin/ || echo "Bin directory not found"
-          
-          mkdir -p release/bin
-          
-          # Try to copy qcr.bat
-          if [ -f "bin/qcr.bat" ]; then
-            echo "Found bin/qcr.bat, copying..."
-            cp bin/qcr.bat release/bin/
-          elif [ -f "./bin/qcr.bat" ]; then
-            echo "Found ./bin/qcr.bat, copying..."
-            cp ./bin/qcr.bat release/bin/
+          # Set version from tag or input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            export VERSION="${{ github.event.inputs.version }}"
+            export VERSION="${VERSION#v}"
           else
-            echo "Warning: bin/qcr.bat not found, creating minimal file"
-            echo "@echo off" > release/bin/qcr.bat
-            echo "node \"%~dp0/../dist/cli.js\" %*" >> release/bin/qcr.bat
+            export VERSION="${{ github.ref_name }}"
+            export VERSION="${VERSION#v}"
           fi
           
-          # Try to copy qcr.ps1
-          if [ -f "bin/qcr.ps1" ]; then
-            echo "Found bin/qcr.ps1, copying..."
-            cp bin/qcr.ps1 release/bin/
-          elif [ -f "./bin/qcr.ps1" ]; then
-            echo "Found ./bin/qcr.ps1, copying..."
-            cp ./bin/qcr.ps1 release/bin/
-          else
-            echo "Warning: bin/qcr.ps1 not found, creating minimal file"
-            echo 'node "$PSScriptRoot/../dist/cli.js" $args' > release/bin/qcr.ps1
-          fi
+          echo "Building for Windows with version: $VERSION"
           
-          # Try to copy install.bat
-          if [ -f "install.bat" ]; then
-            echo "Found install.bat, copying..."
-            cp install.bat release/
-          elif [ -f "./install.bat" ]; then
-            echo "Found ./install.bat, copying..."
-            cp ./install.bat release/
-          else
-            echo "Warning: install.bat not found, skipping"
-          fi
-
-      - name: Create platform-specific package
-        shell: bash
-        run: |
-          cd release
-          # Create platform-specific package.json
+          # Build project
+          pnpm build
+          
+          # Ensure bin directory exists
+          mkdir -p bin
+          
+          # Create Windows executable
+          pnpm exec pkg dist/cli.js --targets node18-win-x64 --output bin/qcr-win32.exe
+          
+          # Create release package
+          mkdir -p release-windows
+          cp bin/qcr-win32.exe release-windows/qcr.exe
+          cp -r dist release-windows/
+          cp -r bin release-windows/
+          cp package.json release-windows/
+          cp README.md release-windows/ || echo "README.md not found"
+          cp README.zh-CN.md release-windows/ || echo "README.zh-CN.md not found"
+          cp LICENSE release-windows/ || echo "LICENSE not found"
+          cp config.example.yaml release-windows/
+          cp config.example.json release-windows/
+          cp INSTALL.md release-windows/ || echo "INSTALL.md not found"
+          cp INSTALL.zh-CN.md release-windows/ || echo "INSTALL.zh-CN.md not found"
+          cp CROSS_PLATFORM_SUMMARY.md release-windows/ || echo "CROSS_PLATFORM_SUMMARY.md not found"
+          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release-windows/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found"
+          cp RELEASE_NOTES.md release-windows/ || echo "RELEASE_NOTES.md not found"
+          cp RELEASE_NOTES.zh-CN.md release-windows/ || echo "RELEASE_NOTES.zh-CN.md not found"
+          cp scripts/install.bat release-windows/ || echo "scripts/install.bat not found"
+          
+          # Update package.json for platform
+          cd release-windows
           node -e "
             const pkg = require('./package.json');
-            pkg.name = '${{ env.PACKAGE_NAME }}';
-            pkg.os = ['${{ env.PLATFORM }}'];
-            pkg.cpu = ['${{ env.ARCH }}'];
+            pkg.name = 'qwen-code-router-win32-x64';
+            pkg.version = '$VERSION';
+            pkg.os = ['win32'];
+            pkg.cpu = ['x64'];
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
-
-      - name: Create single executable archive
-        shell: powershell
-        run: |
-          # Create archive with just the executable file
-          $version = "${{ github.ref_name }}".TrimStart("refs/tags/v")
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ github.event.inputs.version }}".TrimStart("v")
-          }
+          cd ..
           
-          # Create a temporary directory with just the executable
-          mkdir qcr-temp
-          if (Test-Path "qcr.exe") {
-            Copy-Item "qcr.exe" "qcr-temp\"
-          } else {
-            Copy-Item "release\qcr.exe" "qcr-temp\"
-          }
+          # Create archives
+          powershell -Command "Compress-Archive -Path 'release-windows\*' -DestinationPath 'qwen-code-router-$VERSION-win32-x64.zip' -Force"
           
-          # Create the archive with just the executable
-          Compress-Archive -Path "qcr-temp\*" -DestinationPath "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}-executable.${{ env.ARTIFACT_EXT }}"
+          # Create executable-only archive
+          powershell -Command "Compress-Archive -Path 'release-windows\qcr.exe' -DestinationPath 'qwen-code-router-$VERSION-win32-x64-executable.zip' -Force"
+          powershell -Command "Compress-Archive -Path 'release-windows\qcr.exe' -DestinationPath 'qwen-code-router-$VERSION-win32-x64-executable.zip' -Force"
+          
+          echo "Windows build completed successfully"
 
-      - name: Upload executable artifact
+      - name: Upload Windows artifacts
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PACKAGE_NAME }}-executable
-          path: "*-executable.${{ env.ARTIFACT_EXT }}"
-
-      - name: Create full archive
-        shell: powershell
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart("refs/tags/v")
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ github.event.inputs.version }}".TrimStart("v")
-          }
-          Compress-Archive -Path release/* -DestinationPath "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}"
-
-      - name: Upload full artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.PACKAGE_NAME }}
-          path: "*.${{ env.ARTIFACT_EXT }}"
+          name: windows-release
+          path: |
+            *.zip
+          retention-days: 30
 
   build-linux:
+    needs: test
     runs-on: ubuntu-latest
-    env:
-      PLATFORM: linux
-      ARCH: x64
-      PACKAGE_NAME: qwen-code-router-linux-x64
-      ARTIFACT_EXT: tar.gz
+    continue-on-error: true  # Don't fail other platforms if this fails
+    outputs:
+      success: ${{ steps.build.outcome == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -198,17 +174,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Get pnpm store directory
         id: pnpm-cache
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
         uses: actions/cache@v4
@@ -221,110 +196,84 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build project
-        run: pnpm build
-
-      - name: Package as executable
+      - name: Build and package for Linux
+        id: build
         run: |
-          pnpm install pkg
-          pnpm pack:linux
-
-      - name: Create release directory
-        run: mkdir -p release
-
-      - name: Copy built files
-        run: |
-          cp -r dist release/
-          cp qcr release/ || echo "qcr executable not found, skipping"
-          cp package.json release/
-          cp README.md release/ || echo "README.md not found, skipping"
-          cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
-          cp LICENSE release/ || echo "LICENSE not found, skipping"
-          cp config.example.yaml release/
-          cp config.example.json release/
-          cp INSTALL.md release/ || echo "INSTALL.md not found, skipping"
-          cp INSTALL.zh-CN.md release/ || echo "INSTALL.zh-CN.md not found, skipping"
-          cp CROSS_PLATFORM_SUMMARY.md release/ || echo "CROSS_PLATFORM_SUMMARY.md not found, skipping"
-          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found, skipping"
-          cp RELEASE_NOTES.md release/ || echo "RELEASE_NOTES.md not found, skipping"
-          cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
-
-      - name: Copy platform-specific scripts (Unix)
-        run: |
-          mkdir -p release/bin
-          cp bin/qcr release/bin/
-          chmod +x release/bin/qcr
-          cp install.sh release/ || echo "install.sh not found, skipping"
-          chmod +x release/install.sh || echo "install.sh not found, skipping"
-
-      - name: Create platform-specific package
-        run: |
-          cd release
-          # Create platform-specific package.json
+          # Set version from tag or input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            export VERSION="${{ github.event.inputs.version }}"
+            export VERSION="${VERSION#v}"
+          else
+            export VERSION="${{ github.ref_name }}"
+            export VERSION="${VERSION#v}"
+          fi
+          
+          echo "Building for Linux with version: $VERSION"
+          
+          # Build project
+          pnpm build
+          
+          # Ensure bin directory exists
+          mkdir -p bin
+          
+          # Create Linux executable
+          pnpm exec pkg dist/cli.js --targets node18-linux-x64 --output bin/qcr-linux
+          
+          # Create release package
+          mkdir -p release-linux
+          cp bin/qcr-linux release-linux/qcr
+          chmod +x release-linux/qcr
+          cp -r dist release-linux/
+          cp -r bin release-linux/
+          cp package.json release-linux/
+          cp README.md release-linux/ || echo "README.md not found"
+          cp README.zh-CN.md release-linux/ || echo "README.zh-CN.md not found"
+          cp LICENSE release-linux/ || echo "LICENSE not found"
+          cp config.example.yaml release-linux/
+          cp config.example.json release-linux/
+          cp INSTALL.md release-linux/ || echo "INSTALL.md not found"
+          cp INSTALL.zh-CN.md release-linux/ || echo "INSTALL.zh-CN.md not found"
+          cp CROSS_PLATFORM_SUMMARY.md release-linux/ || echo "CROSS_PLATFORM_SUMMARY.md not found"
+          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release-linux/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found"
+          cp RELEASE_NOTES.md release-linux/ || echo "RELEASE_NOTES.md not found"
+          cp RELEASE_NOTES.zh-CN.md release-linux/ || echo "RELEASE_NOTES.zh-CN.md not found"
+          cp scripts/install.sh release-linux/ || echo "scripts/install.sh not found"
+          chmod +x release-linux/install.sh || echo "scripts/install.sh not found"
+          chmod +x release-linux/bin/qcr || echo "bin/qcr not found"
+          
+          # Update package.json for platform
+          cd release-linux
           node -e "
             const pkg = require('./package.json');
-            pkg.name = '${{ env.PACKAGE_NAME }}';
-            pkg.os = ['${{ env.PLATFORM }}'];
-            pkg.cpu = ['${{ env.ARCH }}'];
+            pkg.name = 'qwen-code-router-linux-x64';
+            pkg.version = '$VERSION';
+            pkg.os = ['linux'];
+            pkg.cpu = ['x64'];
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          cd ..
+          
+          # Create archives
+          tar -czf "qwen-code-router-$VERSION-linux-x64.tar.gz" -C release-linux .
+          tar -czf "qwen-code-router-$VERSION-linux-x64-executable.tar.gz" -C release-linux qcr
+          
+          echo "Linux build completed successfully"
 
-      - name: Create single executable archive
-        run: |
-          # Create archive with just the executable file
-          version="${{ github.ref_name }}"
-          version="${version#refs/tags/v}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-            version="${version#v}"
-          fi
-          
-          # Create a temporary directory with just the executable
-          mkdir -p qcr-temp
-          if [ -f "qcr" ]; then
-            cp qcr qcr-temp/
-          else
-            cp release/qcr qcr-temp/
-          fi
-          
-          # Make executable
-          chmod +x qcr-temp/qcr
-          
-          # Create the archive with just the executable
-          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}-executable.${{ env.ARTIFACT_EXT }}" -C qcr-temp .
-
-      - name: Upload executable artifact
+      - name: Upload Linux artifacts
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PACKAGE_NAME }}-executable
-          path: "*-executable.${{ env.ARTIFACT_EXT }}"
-
-      - name: Create full archive
-        run: |
-          version="${{ github.ref_name }}"
-          version="${version#refs/tags/v}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-            version="${version#v}"
-          fi
-          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}" -C release .
-
-      - name: Upload full artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.PACKAGE_NAME }}
-          path: "*.${{ env.ARTIFACT_EXT }}"
+          name: linux-release
+          path: |
+            *.tar.gz
+          retention-days: 30
 
   build-macos:
+    needs: test
     runs-on: macos-latest
-    env:
-      PLATFORM: darwin
-      ARCH: x64
-      PACKAGE_NAME: qwen-code-router-darwin-x64
-      ARTIFACT_EXT: tar.gz
+    continue-on-error: true  # Don't fail other platforms if this fails
+    outputs:
+      success: ${{ steps.build.outcome == 'success' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -332,17 +281,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Get pnpm store directory
         id: pnpm-cache
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
         uses: actions/cache@v4
@@ -355,124 +303,88 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build project
-        run: pnpm build
-
-      - name: Package as executable
+      - name: Build and package for macOS
+        id: build
         run: |
-          pnpm install pkg
-          pnpm pack:macos
-
-      - name: Create release directory
-        run: mkdir -p release
-
-      - name: Copy built files
-        run: |
-          cp -r dist release/
-          cp qcr release/ || echo "qcr executable not found, skipping"
-          cp package.json release/
-          cp README.md release/ || echo "README.md not found, skipping"
-          cp README.zh-CN.md release/ || echo "README.zh-CN.md not found, skipping"
-          cp LICENSE release/ || echo "LICENSE not found, skipping"
-          cp config.example.yaml release/
-          cp config.example.json release/
-          cp INSTALL.md release/ || echo "INSTALL.md not found, skipping"
-          cp INSTALL.zh-CN.md release/ || echo "INSTALL.zh-CN.md not found, skipping"
-          cp CROSS_PLATFORM_SUMMARY.md release/ || echo "CROSS_PLATFORM_SUMMARY.md not found, skipping"
-          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found, skipping"
-          cp RELEASE_NOTES.md release/ || echo "RELEASE_NOTES.md not found, skipping"
-          cp RELEASE_NOTES.zh-CN.md release/ || echo "RELEASE_NOTES.zh-CN.md not found, skipping"
-
-      - name: Copy platform-specific scripts (Unix)
-        run: |
-          mkdir -p release/bin
-          cp bin/qcr release/bin/
-          chmod +x release/bin/qcr
-          cp install.sh release/ || echo "install.sh not found, skipping"
-          chmod +x release/install.sh || echo "install.sh not found, skipping"
-
-      - name: Create platform-specific package
-        run: |
-          cd release
-          # Create platform-specific package.json
+          # Set version from tag or input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            export VERSION="${{ github.event.inputs.version }}"
+            export VERSION="${VERSION#v}"
+          else
+            export VERSION="${{ github.ref_name }}"
+            export VERSION="${VERSION#v}"
+          fi
+          
+          echo "Building for macOS with version: $VERSION"
+          
+          # Build project
+          pnpm build
+          
+          # Ensure bin directory exists
+          mkdir -p bin
+          
+          # Create macOS executable
+          pnpm exec pkg dist/cli.js --targets node18-macos-x64 --output bin/qcr-darwin
+          
+          # Create release package
+          mkdir -p release-macos
+          cp bin/qcr-darwin release-macos/qcr
+          chmod +x release-macos/qcr
+          cp -r dist release-macos/
+          cp -r bin release-macos/
+          cp package.json release-macos/
+          cp README.md release-macos/ || echo "README.md not found"
+          cp README.zh-CN.md release-macos/ || echo "README.zh-CN.md not found"
+          cp LICENSE release-macos/ || echo "LICENSE not found"
+          cp config.example.yaml release-macos/
+          cp config.example.json release-macos/
+          cp INSTALL.md release-macos/ || echo "INSTALL.md not found"
+          cp INSTALL.zh-CN.md release-macos/ || echo "INSTALL.zh-CN.md not found"
+          cp CROSS_PLATFORM_SUMMARY.md release-macos/ || echo "CROSS_PLATFORM_SUMMARY.md not found"
+          cp CROSS_PLATFORM_SUMMARY.zh-CN.md release-macos/ || echo "CROSS_PLATFORM_SUMMARY.zh-CN.md not found"
+          cp RELEASE_NOTES.md release-macos/ || echo "RELEASE_NOTES.md not found"
+          cp RELEASE_NOTES.zh-CN.md release-macos/ || echo "RELEASE_NOTES.zh-CN.md not found"
+          cp scripts/install.sh release-macos/ || echo "scripts/install.sh not found"
+          chmod +x release-macos/install.sh || echo "scripts/install.sh not found"
+          chmod +x release-macos/bin/qcr || echo "bin/qcr not found"
+          
+          # Update package.json for platform
+          cd release-macos
           node -e "
             const pkg = require('./package.json');
-            pkg.name = '${{ env.PACKAGE_NAME }}';
-            pkg.os = ['${{ env.PLATFORM }}'];
-            pkg.cpu = ['${{ env.ARCH }}'];
+            pkg.name = 'qwen-code-router-darwin-x64';
+            pkg.version = '$VERSION';
+            pkg.os = ['darwin'];
+            pkg.cpu = ['x64'];
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          cd ..
+          
+          # Create archives
+          tar -czf "qwen-code-router-$VERSION-darwin-x64.tar.gz" -C release-macos .
+          tar -czf "qwen-code-router-$VERSION-darwin-x64-executable.tar.gz" -C release-macos qcr
+          
+          echo "macOS build completed successfully"
 
-      - name: Create single executable archive
-        run: |
-          # Create archive with just the executable file
-          version="${{ github.ref_name }}"
-          version="${version#refs/tags/v}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-            version="${version#v}"
-          fi
-          
-          # Create a temporary directory with just the executable
-          mkdir -p qcr-temp
-          if [ -f "qcr" ]; then
-            cp qcr qcr-temp/
-          else
-            cp release/qcr qcr-temp/
-          fi
-          
-          # Make executable
-          chmod +x qcr-temp/qcr
-          
-          # Create the archive with just the executable
-          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}-executable.${{ env.ARTIFACT_EXT }}" -C qcr-temp .
-
-      - name: Upload executable artifact
+      - name: Upload macOS artifacts
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PACKAGE_NAME }}-executable
-          path: "*-executable.${{ env.ARTIFACT_EXT }}"
+          name: macos-release
+          path: |
+            *.tar.gz
+          retention-days: 30
 
-      - name: Create full archive
-        run: |
-          version="${{ github.ref_name }}"
-          version="${version#refs/tags/v}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-            version="${version#v}"
-          fi
-          tar -czf "qwen-code-router-$version-${{ env.PLATFORM }}-${{ env.ARCH }}.${{ env.ARTIFACT_EXT }}" -C release .
-
-      - name: Upload full artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.PACKAGE_NAME }}
-          path: "*.${{ env.ARTIFACT_EXT }}"
-
+  # Create GitHub release with all successful builds
   create-release:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     if: always() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch')
     permissions:
       contents: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          find artifacts -name "*.zip" -o -name "*.tar.gz" -o -name "qcr*" -o -name "*-executable.*" | xargs -I {} cp {} release-assets/
-          ls -la release-assets/
 
       - name: Get version
         id: get_version
@@ -485,53 +397,173 @@ jobs:
             echo "version=$version" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check build results
+        id: check_builds
+        run: |
+          echo "Windows build success: ${{ needs.build-windows.outputs.success }}"
+          echo "Linux build success: ${{ needs.build-linux.outputs.success }}"
+          echo "macOS build success: ${{ needs.build-macos.outputs.success }}"
+          
+          # Count successful builds
+          success_count=0
+          if [ "${{ needs.build-windows.outputs.success }}" = "true" ]; then
+            success_count=$((success_count + 1))
+          fi
+          if [ "${{ needs.build-linux.outputs.success }}" = "true" ]; then
+            success_count=$((success_count + 1))
+          fi
+          if [ "${{ needs.build-macos.outputs.success }}" = "true" ]; then
+            success_count=$((success_count + 1))
+          fi
+          
+          echo "success_count=$success_count" >> $GITHUB_OUTPUT
+          
+          # Create build status summary
+          if [ "$success_count" -eq 3 ]; then
+            echo "build_status=All platforms built successfully ✅" >> $GITHUB_OUTPUT
+          elif [ "$success_count" -gt 0 ]; then
+            echo "build_status=Partial success: $success_count/3 platforms built ⚠️" >> $GITHUB_OUTPUT
+          else
+            echo "build_status=All builds failed ❌" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Copy all archives from artifacts
+          find artifacts -name "*.zip" -o -name "*.tar.gz" | while read file; do
+            cp "$file" release-assets/
+            echo "Copied: $(basename "$file")"
+          done
+          
+          # List all release assets
+          echo "Release assets:"
+          ls -la release-assets/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## Qwen Code Router ${{ steps.get_version.outputs.version }}
+          
+          A command-line tool to manage and switch API configurations for different large model service providers when using Qwen Code.
+          
+          ### Build Status
+          ${{ steps.check_builds.outputs.build_status }}
+          
+          ### Features
+          - ✅ Cross-platform support (Windows, Linux, macOS)
+          - ✅ Multiple provider support (OpenAI, Azure, Anthropic, Google)
+          - ✅ Easy configuration management
+          - ✅ Quick provider/model switching
+          - ✅ Configuration validation
+          - ✅ Standalone executables (no Node.js required)
+          
+          ### Downloads
+          Choose the appropriate package for your platform:
+          
+          **Full Packages (includes documentation and examples):**
+          - **Windows**: `qwen-code-router-*-win32-x64.zip`
+          - **Linux**: `qwen-code-router-*-linux-x64.tar.gz`
+          - **macOS**: `qwen-code-router-*-darwin-x64.tar.gz`
+          
+          **Executable Only (minimal download):**
+          - **Windows**: `qwen-code-router-*-win32-x64-executable.zip`
+          - **Linux**: `qwen-code-router-*-linux-x64-executable.tar.gz`
+          - **macOS**: `qwen-code-router-*-darwin-x64-executable.tar.gz`
+          
+          ### Installation
+          
+          #### Full Package Installation
+          1. Download the appropriate full package for your platform
+          2. Extract the archive
+          3. Run the installation script:
+             - Windows: Run `install.bat` as Administrator
+             - Unix/Linux/macOS: Run `./install.sh`
+          4. Or follow the manual installation instructions in `INSTALL.md`
+          
+          #### Executable Only Installation
+          1. Download the executable-only package for your platform
+          2. Extract the executable
+          3. Place it in a directory in your PATH
+          4. Create a configuration file (see examples in full package)
+          
+          ### Quick Start
+          ```bash
+          # Copy example configuration (full package only)
+          cp config.example.yaml config.yaml
+          
+          # Edit configuration with your API keys
+          # Then use the tool
+          qcr list config
+          qcr use openai-gpt4
+          qcr run
+          
+          # Or use quick setup
+          /router openai gpt-4
+          qcr run
+          ```
+          
+          ### Configuration Example
+          ```yaml
+          default_config:
+            - name: openai-gpt4
+          
+          configs:
+            - config:
+                - name: openai-gpt4
+                  provider: openai
+                  model: gpt-4
+          
+          providers:
+            - provider: openai
+              env:
+                api_key: YOUR_OPENAI_API_KEY
+                base_url: https://api.openai.com/v1
+                models:
+                  - model: gpt-4
+                  - model: gpt-3.5-turbo
+          ```
+          
+          ### System Requirements
+          - No Node.js installation required (executables are self-contained)
+          - Windows 10+ / Linux (glibc 2.17+) / macOS 10.14+
+          - Qwen Code installed and accessible via `qwen` command
+          
+          ### Documentation
+          For detailed installation and usage instructions, see the included documentation:
+          - `INSTALL.md` - Installation guide
+          - `README.md` - General documentation
+          - `CROSS_PLATFORM_SUMMARY.md` - Cross-platform compatibility notes
+          
+          ### Support
+          For issues and questions, please visit the project repository.
+          EOF
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Qwen Code Router ${{ steps.get_version.outputs.version }}
-          body: |
-            ## Qwen Code Router ${{ steps.get_version.outputs.version }}
-            
-            A command-line tool to manage and switch API configurations for different large model service providers when using Qwen Code.
-            
-            ### Features
-            - ✅ Cross-platform support (Windows, Linux, macOS)
-            - ✅ Multiple provider support (OpenAI, Azure, Anthropic, Google)
-            - ✅ Easy configuration management
-            - ✅ Quick provider/model switching
-            - ✅ Configuration validation
-            
-            ### Downloads
-            Choose the appropriate package for your platform:
-            
-            - **Windows**: `qwen-code-router-*-win32-x64.zip`
-            - **Linux**: `qwen-code-router-*-linux-x64.tar.gz`
-            - **macOS**: `qwen-code-router-*-darwin-x64.tar.gz`
-            
-            ### Installation
-            1. Download the appropriate package for your platform
-            2. Extract the archive
-            3. Run the installation script (`install.bat` for Windows, `install.sh` for Unix)
-            4. Or follow the manual installation instructions in `INSTALL.md`
-            
-            ### Quick Start
-            ```bash
-            # Copy example configuration
-            cp config.example.yaml config.yaml
-            
-            # Edit configuration with your API keys
-            # Then use the tool
-            qcr list config
-            qcr use openai-gpt4
-            qcr run
-            ```
-            
-            For detailed installation and usage instructions, see the included `INSTALL.md` file.
+          body_path: release_notes.md
           draft: false
           prerelease: false
           files: |
             release-assets/*
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "🎉 Release ${{ steps.get_version.outputs.version }} created successfully!"
+          echo "📊 Build Status: ${{ steps.check_builds.outputs.build_status }}"
+          echo "📦 Assets uploaded: $(ls -1 release-assets/ | wc -l)"
+          echo "🔗 Release URL: ${{ steps.create_release.outputs.url }}"
