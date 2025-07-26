@@ -22,7 +22,6 @@ lib/
 # Release files
 release/
 qwen-code-router-*/
-bin/
 *.zip
 *.tar.gz
 *.tgz
@@ -31,6 +30,11 @@ bin/
 *.iso
 *.jar
 *.rar
+
+# Compiled executables in bin directory
+bin/qcr-win32.exe
+bin/qcr-linux
+bin/qcr-darwin
 
 # Test coverage
 coverage/
@@ -135,5 +139,11 @@ jspm_packages/
 # public
 
 # Local development files (not for git)
-RELEASE_GUIDE.md
-RELEASE_NOTES_TEMPLATE.md
+*.md
+docs/
+bin/
+
+# User files
+!README*.md
+!RELEASE_NOTES*.md
+!INSTALL*.md

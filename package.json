@@ -1,6 +1,6 @@
 {
   "name": "qwen-code-router",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A command-line tool to manage and switch API configurations for different large model service providers when using Qwen Code",
   "main": "dist/index.js",
   "bin": {
@@ -22,7 +22,10 @@
     "pack:win": "pkg dist/cli.js --targets node18-win-x64 --output qcr.exe",
     "pack:linux": "pkg dist/cli.js --targets node18-linux-x64 --output qcr",
     "pack:macos": "pkg dist/cli.js --targets node18-macos-x64 --output qcr",
-    "pack:all": "pnpm run pack:win && pnpm run pack:linux && pnpm run pack:macos"
+    "pack:all": "pnpm run pack:win && pnpm run pack:linux && pnpm run pack:macos",
+    "package:release": "node scripts/package-release.js",
+    "package:github": "pnpm run clean && pnpm run build && pnpm run package:release",
+    "test:packaging": "node scripts/test-packaging.js"
   },
   "keywords": [
     "qwen",
