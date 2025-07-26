@@ -348,17 +348,59 @@ For issues and questions, please visit the project repository.
                     if (platform === 'win32') {
                         try {
                             const zipPath = path.join(this.releaseDir, `${execArchiveName}.zip`);
-                            const command = `powershell -Command "Compress-Archive -Path '${executablePath}' -DestinationPath '${zipPath}' -Force"`;
+                            // Create a temporary directory with the executable and config files
+                            const tempDir = path.join(this.releaseDir, `temp-${platform}-${arch}`);
+                            fs.mkdirSync(tempDir, { recursive: true });
+                            
+                            // Copy executable
+                            fs.copyFileSync(executablePath, path.join(tempDir, executableName));
+                            
+                            // Copy config files
+                            const configFiles = ['config.example.yaml', 'config.example.json'];
+                            configFiles.forEach(file => {
+                                const srcPath = path.join(this.rootDir, file);
+                                if (fs.existsSync(srcPath)) {
+                                    fs.copyFileSync(srcPath, path.join(tempDir, file));
+                                }
+                            });
+                            
+                            // Create the archive
+                            const command = `powershell -Command "Compress-Archive -Path '${tempDir}\\*' -DestinationPath '${zipPath}' -Force"`;
                             execSync(command, { stdio: 'pipe' });
-                            this.log(`✅ Created ${execArchiveName}.zip (executable only)`);
+                            
+                            // Clean up temp directory
+                            fs.rmSync(tempDir, { recursive: true, force: true });
+                            
+                            this.log(`✅ Created ${execArchiveName}.zip (executable and config files)`);
                         } catch (error) {
                             this.log(`❌ Failed to create executable ZIP for ${platform}-${arch}: ${error.message}`, 'error');
                         }
                     } else {
                         try {
                             const tarPath = path.join(this.releaseDir, `${execArchiveName}.tar.gz`);
-                            execSync(`tar -czf "${tarPath}" -C "${platformDir}" "${executableName}"`, { stdio: 'pipe' });
-                            this.log(`✅ Created ${execArchiveName}.tar.gz (executable only)`);
+                            // Create a temporary directory with the executable and config files
+                            const tempDir = path.join(this.releaseDir, `temp-${platform}-${arch}`);
+                            fs.mkdirSync(tempDir, { recursive: true });
+                            
+                            // Copy executable
+                            fs.copyFileSync(executablePath, path.join(tempDir, executableName));
+                            
+                            // Copy config files
+                            const configFiles = ['config.example.yaml', 'config.example.json'];
+                            configFiles.forEach(file => {
+                                const srcPath = path.join(this.rootDir, file);
+                                if (fs.existsSync(srcPath)) {
+                                    fs.copyFileSync(srcPath, path.join(tempDir, file));
+                                }
+                            });
+                            
+                            // Create the archive
+                            execSync(`tar -czf "${tarPath}" -C "${tempDir}" .`, { stdio: 'pipe' });
+                            
+                            // Clean up temp directory
+                            fs.rmSync(tempDir, { recursive: true, force: true });
+                            
+                            this.log(`✅ Created ${execArchiveName}.tar.gz (executable and config files)`);
                         } catch (error) {
                             this.log(`❌ Failed to create executable tar.gz for ${platform}-${arch}: ${error.message}`, 'error');
                         }

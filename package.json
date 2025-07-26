@@ -13,7 +13,7 @@
     "start": "node dist/cli.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "clean": "rimraf dist",
+    "clean": "rimraf dist bin release",
     "prepublishOnly": "pnpm run clean && pnpm run build",
     "build:release": "node scripts/build-release.js",
     "release": "pnpm run clean && pnpm run build && pnpm run build:release",
