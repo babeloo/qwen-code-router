@@ -2,6 +2,7 @@
   "name": "qwen-code-router",
   "version": "0.1.1",
   "description": "A command-line tool to manage and switch API configurations for different large model service providers when using Qwen Code",
+  "packageManager": "pnpm@8.6.6",
   "main": "dist/index.js",
   "bin": {
     "qcr": "dist/cli.js"
