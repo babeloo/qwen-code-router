@@ -4,9 +4,10 @@ import { handleUseCommand, handleRunCommand, handleSetDefaultCommand, handleList
 
 /**
  * Main CLI handler function
+ * @param customArgs Optional custom arguments for testing
  */
-export async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+export async function main(customArgs?: string[]): Promise<void> {
+  const args = customArgs || process.argv.slice(2);
   
   if (args.length === 0) {
     showHelp();
@@ -15,6 +16,13 @@ export async function main(): Promise<void> {
   
   const command = args[0];
   const commandArgs = args.slice(1);
+  
+  // Handle case when no command is provided (extra safety check)
+  if (command === undefined) {
+    showHelp();
+    process.exit(0);
+    return; // This line will never be reached, but added for clarity
+  }
   
   let result: CommandResult;
   

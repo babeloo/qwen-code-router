@@ -25,47 +25,47 @@ describe('Project Setup', () => {
   });
 
   test('should show help when no arguments provided', async () => {
-    // Capture console.log to avoid output during tests
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    
-    // Set empty arguments
-    process.argv = ['node', 'qcr'];
-    
-    await main();
-    
+    // Capture console.log and console.error to avoid output during tests
+    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await main([]);
+
     expect(mockExit).toHaveBeenCalledWith(0);
-    expect(consoleSpy).toHaveBeenCalled();
-    
-    consoleSpy.mockRestore();
+    expect(consoleLogSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+    consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   test('should handle help command', async () => {
-    // Capture console.log to avoid output during tests
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    
-    // Set help command arguments
-    process.argv = ['node', 'qcr', 'help'];
-    
-    await main();
-    
+    // Capture console.log and console.error to avoid output during tests
+    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await main(['help']);
+
     expect(mockExit).toHaveBeenCalledWith(0);
-    expect(consoleSpy).toHaveBeenCalled();
-    
-    consoleSpy.mockRestore();
+    expect(consoleLogSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+    consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   test('should handle unknown command', async () => {
-    // Capture console.error to avoid output during tests
+    // Capture console.log and console.error to avoid output during tests
+    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    
-    // Set unknown command arguments
-    process.argv = ['node', 'qcr', 'unknown-command'];
-    
-    await main();
-    
+
+    await main(['unknown-command']);
+
     expect(mockExit).toHaveBeenCalledWith(1);
+    expect(consoleLogSpy).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Error: Unknown command: unknown-command');
-    
+
+    consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
 });
