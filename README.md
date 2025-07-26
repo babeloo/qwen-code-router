@@ -5,7 +5,7 @@ A command-line tool to manage and switch API configurations for different large 
 ## Features
 
 - ✅ **Cross-platform support** - Works on Windows, Linux, and macOS
-- ✅ **Multiple provider support** - OpenAI, Azure OpenAI, Anthropic, Google AI
+- ✅ **Universal OpenAI-compatible API support** - Works with any OpenAI-compatible API endpoint
 - ✅ **Easy configuration management** - YAML/JSON configuration files
 - ✅ **Quick provider/model switching** - Switch between configurations instantly
 - ✅ **Configuration validation** - Validate your configurations before use
@@ -82,9 +82,20 @@ providers:
       models:
         - model: claude-3-opus-20240229
         - model: claude-3-sonnet-20240229
+  # Example: Custom OpenAI-compatible API
+  - provider: local-llm
+    env:
+      api_key: "your-local-api-key-or-token"
+      base_url: "http://localhost:8000/v1"
+      models:
+        - model: llama-3-8b
+        - model: mistral-7b
 ```
 
-**Important**: Replace `"your-*-api-key-here"` with your actual API keys from the respective providers.
+**Important**: 
+- Replace `"your-*-api-key-here"` with your actual API keys from the respective providers
+- For OpenAI-compatible APIs, set the `base_url` to your API endpoint and provide the appropriate authentication token as `api_key`
+- The tool works with any API that implements the OpenAI API specification
 
 ### Usage
 
@@ -111,7 +122,7 @@ qcr set-default openai-gpt4
 # List all available providers and their models
 qcr list provider
 
-# List built-in providers (OpenAI, Azure, Anthropic, Google)
+# List built-in providers if API key are provided (OpenAI, Azure, Anthropic, Google)
 qcr list provider --builtin
 ```
 
@@ -126,10 +137,15 @@ Once Qwen Code is running, you can use the router command for quick switching:
 
 ## Supported Providers
 
+Qwen Code Router supports **all OpenAI-compatible APIs**, including but not limited to:
+
 - **OpenAI** - GPT-4, GPT-3.5 Turbo, and other OpenAI models
 - **Azure OpenAI** - Azure-hosted OpenAI models
 - **Anthropic** - Claude 3 Opus, Sonnet, Haiku
 - **Google AI** - Gemini Pro, Gemini 1.5 Pro/Flash
+- **Any OpenAI-compatible API** - Local models, custom endpoints, and third-party providers that implement the OpenAI API standard
+
+Since Qwen Code supports OpenAI-compatible APIs, you can configure any provider that follows the OpenAI API specification by setting the appropriate `base_url` and `api_key` in your configuration file.
 
 ## Configuration File Locations
 
