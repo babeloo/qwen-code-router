@@ -9,7 +9,7 @@ import { loadConfigFile } from '../command-utils';
 import { validateEnvironmentVariables } from '../environment';
 import { CommandResult } from '../commands';
 import { ConfigFile } from '../types';
-import { parseFlags, validateArgCount } from '../command-args';
+import { parseFlags } from '../command-args';
 import { BUILTIN_PROVIDERS } from './list';
 
 /**
@@ -47,21 +47,28 @@ export async function routerCommand(options: RouterCommandOptions): Promise<Comm
     try {
       const result = await loadConfigFile(options.currentDir);
       if (!result.success) {
-        return result.errorResult;
-      }
-      
-      config = result.config;
-      validation = result.validation;
-      filePath = result.filePath;
+        // If it's a "not found" error, continue with built-in providers only
+        if (result.errorResult.message.includes('not found')) {
+          hasConfigFile = false;
+          config = { configs: [], providers: [] };
+        } else {
+          // For other errors, return the error result
+          return result.errorResult;
+        }
+      } else {
+        config = result.config;
+        validation = result.validation;
+        filePath = result.filePath;
 
-      // Check if configuration file is valid
-      if (!validation.isValid) {
-        return {
-          success: false,
-          message: 'Configuration file validation failed',
-          details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
-          exitCode: 1
-        };
+        // Check if configuration file is valid
+        if (!validation.isValid) {
+          return {
+            success: false,
+            message: 'Configuration file validation failed',
+            details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
+            exitCode: 1
+          };
+        }
       }
     } catch (error) {
       // No config file found, we'll use built-in providers only
@@ -339,28 +346,47 @@ export function parseRouterCommandArgs(args: string[]): {
     return { valid: true, showHelp: true };
   }
 
-  // 验证参数数量
-  const argValidation = validateArgCount(remainingArgs, 2, 2, 'Provider and model are required');
-  if (!argValidation.valid) {
-    return {
-      valid: false,
-      error: argValidation.error || 'Provider and model are required'
-    };
+  // Check for unknown flags before validating argument count
+  for (const arg of args) {
+    if (arg && arg.startsWith('-') && arg !== '-h' && arg !== '--help' && arg !== '-v' && arg !== '--verbose') {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}. Use --help for usage information.`
+      };
+    }
   }
 
-  // 验证参数存在
+  // Validate argument count
   if (remainingArgs.length < 2) {
+    if (remainingArgs.length === 0) {
+      return {
+        valid: false,
+        error: 'Provider name is required. Use --help for usage information.'
+      };
+    } else {
+      return {
+        valid: false,
+        error: 'Model name is required. Use --help for usage information.'
+      };
+    }
+  }
+
+  if (remainingArgs.length > 2) {
     return {
       valid: false,
-      error: 'Provider and model are required'
+      error: `Too many arguments. Expected provider and model, got: ${remainingArgs.join(', ')}`
     };
   }
 
   const options: RouterCommandOptions = {
     provider: remainingArgs[0]!,
     model: remainingArgs[1]!,
-    verbose: parsedFlags['verbose'] || false
   };
+  
+  // Only add verbose property if it was explicitly set
+  if (parsedFlags['verbose']) {
+    options.verbose = true;
+  }
 
   return {
     valid: true,

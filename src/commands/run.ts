@@ -142,9 +142,13 @@ export function parseRunCommandArgs(args: string[]): {
   }
 
   const options: RunCommandOptions = {
-    additionalArgs: remainingArgs,
-    verbose: parsedFlags['verbose'] || false
+    additionalArgs: remainingArgs
   };
+  
+  // Only add verbose property if it was explicitly set
+  if (parsedFlags['verbose']) {
+    options.verbose = true;
+  }
 
   return {
     valid: true,

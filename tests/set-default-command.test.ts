@@ -2,13 +2,8 @@
  * Unit tests for the set-default command functionality
  */
 
-import { 
-  setDefaultCommand, 
-  handleSetDefaultCommand, 
-  parseSetDefaultCommandArgs, 
-  setDefaultCommandHelp,
-  SetDefaultCommandOptions 
-} from '../src/commands';
+import { handleSetDefaultCommand } from '../src/commands';
+import { setDefaultCommand, parseSetDefaultCommandArgs, setDefaultCommandHelp, SetDefaultCommandOptions } from '../src/commands/set-default';
 import * as persistence from '../src/persistence';
 import * as resolver from '../src/resolver';
 import { ConfigFile } from '../src/types';

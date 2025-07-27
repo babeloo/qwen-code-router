@@ -3,13 +3,9 @@
  * Tests the qcr use command implementation and related functionality
  */
 
-import {
-  listConfigurations,
-  getCurrentStatus,
-  parseUseCommandArgs,
-  handleUseCommand
-} from '../src/commands';
-import {
+import { handleUseCommand, listConfigurations, getCurrentStatus } from '../src/commands';
+import { 
+  parseUseCommandArgs, 
   useCommand,
   useCommandHelp,
   UseCommandOptions

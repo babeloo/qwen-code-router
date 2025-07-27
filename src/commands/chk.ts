@@ -6,7 +6,7 @@ import { loadConfigFile } from '../command-utils';
 import { getAllConfigurationNames, getCurrentDefaultConfiguration } from '../resolver';
 import { CommandResult } from '../commands';
 import { ConfigFile } from '../types';
-import { parseFlags, validateArgCount } from '../command-args';
+import { parseFlags } from '../command-args';
 
 /**
  * Options for the chk command
@@ -461,18 +461,35 @@ export function parseChkCommandArgs(args: string[]): {
   }
 
   // 验证参数数量
-  const argValidation = validateArgCount(remainingArgs, 0, 1, 'Too many arguments');
-  if (!argValidation.valid) {
+  if (remainingArgs.length > 1) {
     return {
       valid: false,
-      error: argValidation.error || 'Too many arguments'
+      error: `Too many arguments. Expected at most one configuration name, got: ${remainingArgs.join(', ')}`
     };
   }
+  
+  // Check for unknown flags
+  for (const arg of args) {
+    if (arg && arg.startsWith('-') && 
+        arg !== '-h' && arg !== '--help' && 
+        arg !== '-v' && arg !== '--verbose' &&
+        arg !== '--test-api') {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}. Use --help for usage information.`
+      };
+    }
+  }
 
-  const options: ChkCommandOptions = {
-    verbose: parsedFlags['verbose'] || false,
-    testApi: parsedFlags['testApi'] || false
-  };
+  const options: ChkCommandOptions = {};
+  
+  // Only add properties if they were explicitly set
+  if (parsedFlags['verbose']) {
+    options.verbose = true;
+  }
+  if (parsedFlags['testApi']) {
+    options.testApi = true;
+  }
 
   if (remainingArgs.length > 0) {
     options.configName = remainingArgs[0];

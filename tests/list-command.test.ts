@@ -2,14 +2,8 @@
  * Unit tests for the list command functionality
  */
 
-import { 
-  listConfigCommand, 
-  handleListCommand, 
-  parseListCommandArgs, 
-  listCommandHelp,
-  ListCommandOptions,
-  listConfigurations
-} from '../src/commands';
+import { handleListCommand, listConfigurations } from '../src/commands';
+import { listConfigCommand, parseListCommandArgs, listCommandHelp, ListCommandOptions } from '../src/commands/list';
 import * as persistence from '../src/persistence';
 import { ConfigFile } from '../src/types';
 
@@ -268,9 +262,9 @@ describe('listConfigCommand', () => {
     const result = await listConfigCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('No configuration file found');
-    expect(result.details).toBe('No configuration file found in current directory');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Configuration file not found');
+    expect(result.details).toContain('Searched in the following locations');
+    expect(result.exitCode).toBe(3);
   });
 
   it('should fail when configuration file is invalid', async () => {

@@ -2,13 +2,8 @@
  * Unit tests for the chk command functionality
  */
 
-import { 
-  chkCommand,
-  handleChkCommand,
-  parseChkCommandArgs,
-  validateConfiguration,
-  ChkCommandOptions
-} from '../src/commands';
+import { handleChkCommand } from '../src/commands';
+import { chkCommand, parseChkCommandArgs, validateConfiguration, ChkCommandOptions } from '../src/commands/chk';
 import * as persistence from '../src/persistence';
 import { ConfigFile } from '../src/types';
 
@@ -334,9 +329,9 @@ describe('chkCommand', () => {
     const result = await chkCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('No configuration file found');
-    expect(result.details).toBe('No configuration file found in current directory');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Configuration file not found');
+    expect(result.details).toContain('Searched in the following locations');
+    expect(result.exitCode).toBe(3);
   });
 
   it('should handle invalid configuration file', async () => {

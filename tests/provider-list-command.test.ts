@@ -2,15 +2,8 @@
  * Unit tests for the provider list command functionality
  */
 
-import { 
-  listProviders,
-  listProviderCommand,
-  parseListCommandArgs,
-  handleListCommand,
-  ListCommandOptions,
-  listBuiltinProviders,
-  BUILTIN_PROVIDERS
-} from '../src/commands';
+import { handleListCommand } from '../src/commands';
+import { listProviders, listProviderCommand, parseListCommandArgs, ListCommandOptions, listBuiltinProviders, BUILTIN_PROVIDERS } from '../src/commands/list';
 import * as persistence from '../src/persistence';
 import { ConfigFile } from '../src/types';
 
@@ -404,9 +397,9 @@ describe('listProviderCommand', () => {
     const result = await listProviderCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('No configuration file found');
-    expect(result.details).toBe('No configuration file found in current directory');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Configuration file not found');
+    expect(result.details).toContain('Searched in the following locations');
+    expect(result.exitCode).toBe(3);
   });
 
   it('should fail when configuration file is invalid', async () => {

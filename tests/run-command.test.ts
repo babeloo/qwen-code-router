@@ -2,13 +2,8 @@
  * Unit tests for the run command functionality
  */
 
-import { 
-  runCommand, 
-  handleRunCommand, 
-  parseRunCommandArgs, 
-  runCommandHelp,
-  RunCommandOptions 
-} from '../src/commands';
+import { handleRunCommand } from '../src/commands';
+import { runCommand, parseRunCommandArgs, runCommandHelp, RunCommandOptions } from '../src/commands/run';
 import * as environment from '../src/environment';
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';

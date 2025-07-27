@@ -15,7 +15,7 @@ import {
   invalidArgumentsError
 } from '../errors';
 import { CommandResult } from '../commands';
-import { parseFlags, validateArgCount } from '../command-args';
+import { parseFlags } from '../command-args';
 
 /**
  * Options for the set-default command
@@ -120,6 +120,17 @@ export function parseSetDefaultCommandArgs(args: string[]): {
   error?: string;
   showHelp?: boolean;
 } {
+  // Check for unknown flags first
+  for (const arg of args) {
+    if (arg && arg.startsWith('-') && arg !== '-h' && arg !== '--help' && arg !== '-v' && arg !== '--verbose') {
+      // If it's a flag and not a configuration name, treat it as unknown option
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}`
+      };
+    }
+  }
+
   const { parsedFlags, remainingArgs } = parseFlags(args, {
     help: ['-h', '--help'],
     verbose: ['-v', '--verbose']
@@ -130,18 +141,28 @@ export function parseSetDefaultCommandArgs(args: string[]): {
   }
 
   // 验证参数数量
-  const argValidation = validateArgCount(remainingArgs, 1, 1, 'Configuration name is required');
-  if (!argValidation.valid) {
+  if (remainingArgs.length === 0) {
     return {
       valid: false,
-      error: argValidation.error || 'Configuration name is required'
+      error: 'Configuration name is required'
+    };
+  }
+  
+  if (remainingArgs.length > 1) {
+    return {
+      valid: false,
+      error: `Too many arguments. Expected exactly one configuration name, got: ${remainingArgs.join(', ')}`
     };
   }
 
   const options: SetDefaultCommandOptions = {
     configName: remainingArgs[0]!,
-    verbose: parsedFlags['verbose'] || false
   };
+  
+  // Only add verbose property if it was explicitly set
+  if (parsedFlags['verbose']) {
+    options.verbose = true;
+  }
 
   return {
     valid: true,

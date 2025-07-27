@@ -20,7 +20,7 @@ import {
   environmentValidationError
 } from '../errors';
 import { CommandResult } from '../commands';
-import { parseFlags, validateArgCount } from '../command-args';
+import { parseFlags } from '../command-args';
 
 /**
  * Options for the use command
@@ -146,17 +146,29 @@ export function parseUseCommandArgs(args: string[]): {
   }
 
   // 验证参数数量
-  const argValidation = validateArgCount(remainingArgs, 0, 1, 'Too many arguments');
-  if (!argValidation.valid) {
+  if (remainingArgs.length > 1) {
     return {
       valid: false,
-      error: argValidation.error || 'Invalid arguments'
+      error: `Too many arguments. Expected at most one configuration name, got: ${remainingArgs.join(', ')}`
     };
   }
+  
+  // Check for unknown flags
+  for (const arg of args) {
+    if (arg && arg.startsWith('-') && arg !== '-h' && arg !== '--help' && arg !== '-v' && arg !== '--verbose') {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}`
+      };
+    }
+  }
 
-  const options: UseCommandOptions = {
-    verbose: parsedFlags['verbose'] || false
-  };
+  const options: UseCommandOptions = {};
+  
+  // Only add verbose property if it was explicitly set
+  if (parsedFlags['verbose']) {
+    options.verbose = true;
+  }
 
   if (remainingArgs.length > 0) {
     options.configName = remainingArgs[0];

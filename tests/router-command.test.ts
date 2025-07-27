@@ -2,12 +2,8 @@
  * Unit tests for the router command functionality
  */
 
-import { 
-  routerCommand,
-  handleRouterCommand,
-  parseRouterCommandArgs,
-  RouterCommandOptions
-} from '../src/commands';
+import { handleRouterCommand } from '../src/commands';
+import { routerCommand, parseRouterCommandArgs, RouterCommandOptions } from '../src/commands/router';
 import * as persistence from '../src/persistence';
 import * as resolver from '../src/resolver';
 import { ConfigFile } from '../src/types';

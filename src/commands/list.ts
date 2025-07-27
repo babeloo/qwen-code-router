@@ -641,6 +641,22 @@ export function parseListCommandArgs(args: string[]): {
   error?: string;
   showHelp?: boolean;
 } {
+  // Check for unknown flags first
+  for (const arg of args) {
+    if (arg && arg.startsWith('-') && 
+        arg !== '-h' && arg !== '--help' && 
+        arg !== '-v' && arg !== '--verbose' &&
+        arg !== '-p' && 
+        arg !== '-f' &&
+        arg !== '--all' && 
+        arg !== '--tree') {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}. Use --help for usage information.`
+      };
+    }
+  }
+
   const { parsedFlags, remainingArgs } = parseFlags(args, {
     help: ['-h', '--help'],
     verbose: ['-v', '--verbose'],
@@ -654,13 +670,24 @@ export function parseListCommandArgs(args: string[]): {
     return { valid: true, showHelp: true };
   }
 
-  const options: ListCommandOptions = {
-    verbose: parsedFlags['verbose'] || false,
-    all: parsedFlags['all'] || false,
-    tree: parsedFlags['tree'] || false,
-    shortForm: parsedFlags['shortForm'] || false,
-    builtinProviders: parsedFlags['builtinProviders'] || false
-  };
+  const options: ListCommandOptions = {};
+  
+  // Only add properties if they were explicitly set
+  if (parsedFlags['verbose']) {
+    options.verbose = true;
+  }
+  if (parsedFlags['all']) {
+    options.all = true;
+  }
+  if (parsedFlags['tree']) {
+    options.tree = true;
+  }
+  if (parsedFlags['shortForm']) {
+    options.shortForm = true;
+  }
+  if (parsedFlags['builtinProviders']) {
+    options.builtinProviders = true;
+  }
 
   let subcommand: string | undefined;
   let providerName: string | undefined;
@@ -673,7 +700,18 @@ export function parseListCommandArgs(args: string[]): {
 
     // This could be a subcommand or provider name
     if (subcommand === undefined) {
-      subcommand = arg;
+      // Special handling for when -p is used - 'arg' is actually a provider name, not a subcommand
+      if (options.shortForm && !options.builtinProviders) {
+        subcommand = 'provider';
+        providerName = arg;
+      } 
+      // Special handling for when -f is used - 'arg' is actually a provider name, not a subcommand
+      else if (options.builtinProviders) {
+        subcommand = 'provider';
+        providerName = arg;
+      } else {
+        subcommand = arg;
+      }
     } else if (subcommand === 'provider' && providerName === undefined) {
       providerName = arg;
     } else {
@@ -685,30 +723,14 @@ export function parseListCommandArgs(args: string[]): {
   }
 
   // Validate subcommand
-  if (subcommand && !['config', 'provider'].includes(subcommand)) {
+  if (subcommand && !['config', 'provider'].includes(subcommand) && !options.builtinProviders) {
     return {
       valid: false,
       error: `Unknown subcommand: ${subcommand}. Available subcommands: config, provider`
     };
   }
 
-  // Validate --all flag usage
-  if (options.all && subcommand !== 'provider') {
-    return {
-      valid: false,
-      error: '--all flag can only be used with provider subcommand'
-    };
-  }
-
-  // Validate --tree flag usage
-  if (options.tree && subcommand !== 'provider') {
-    return {
-      valid: false,
-      error: '--tree flag can only be used with provider subcommand'
-    };
-  }
-
-  // Validate --all flag usage with built-in providers
+  // Validate --all flag usage with built-in providers (must be done before other validations)
   if (options.all && options.builtinProviders) {
     return {
       valid: false,
@@ -716,7 +738,7 @@ export function parseListCommandArgs(args: string[]): {
     };
   }
 
-  // Validate --tree flag usage with built-in providers
+  // Validate --tree flag usage with built-in providers (must be done before other validations)
   if (options.tree && options.builtinProviders) {
     return {
       valid: false,
@@ -724,8 +746,24 @@ export function parseListCommandArgs(args: string[]): {
     };
   }
 
+  // Validate --all flag usage
+  if (options.all && !(subcommand === 'provider' || options.shortForm)) {
+    return {
+      valid: false,
+      error: '--all flag can only be used with provider subcommand'
+    };
+  }
+
+  // Validate --tree flag usage
+  if (options.tree && !(subcommand === 'provider' || options.shortForm)) {
+    return {
+      valid: false,
+      error: '--tree flag can only be used with provider subcommand'
+    };
+  }
+
   // Validate provider name usage
-  if (providerName && subcommand !== 'provider') {
+  if (providerName && !(subcommand === 'provider' || options.shortForm || options.builtinProviders)) {
     return {
       valid: false,
       error: 'Provider name can only be specified with provider subcommand'
@@ -741,13 +779,15 @@ export function parseListCommandArgs(args: string[]): {
   }
 
   // If short form is used, set subcommand to provider
-  if (options.shortForm && !options.subcommand) {
+  if (options.shortForm && !options.subcommand && !subcommand) {
     options.subcommand = 'provider';
+    subcommand = 'provider';
   }
 
   // If builtin providers flag is used, set subcommand to provider
-  if (options.builtinProviders && !options.subcommand) {
+  if (options.builtinProviders && !options.subcommand && !subcommand) {
     options.subcommand = 'provider';
+    subcommand = 'provider';
   }
 
   return {
