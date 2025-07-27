@@ -379,7 +379,7 @@ describe('Platform Utilities', () => {
     afterEach(async () => {
       // Clean up test directory
       try {
-        await fs.promises.rmdir(path.join(os.tmpdir(), 'qcr-test-dir'), { recursive: true });
+        await fs.promises.rm(path.join(os.tmpdir(), 'qcr-test-dir'), { recursive: true, force: true });
       } catch {
         // Ignore cleanup errors
       }

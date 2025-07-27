@@ -61,12 +61,13 @@ export interface ResolutionResult {
 }
 
 /**
- * Resolves a configuration by name and sets environment variables
+ * Resolves a configuration by name and optionally sets environment variables
  * @param configName - Name of the configuration to resolve
  * @param configFile - Configuration file containing all configurations and providers
+ * @param setEnvironmentVariables - Whether to set environment variables (default: true)
  * @returns ResolutionResult with success status and details
  */
-export function resolveConfigurationByName(configName: string, configFile: ConfigFile): ResolutionResult {
+export function resolveConfigurationByName(configName: string, configFile: ConfigFile, setEnvironmentVariables: boolean = true): ResolutionResult {
   try {
     // Find the configuration entry
     const configEntry = findConfigurationByName(configName, configFile);
@@ -101,8 +102,10 @@ export function resolveConfigurationByName(configName: string, configFile: Confi
     // Create environment variables
     const envVars = createEnvironmentVariables(configEntry, provider);
 
-    // Set environment variables
-    setEnvironmentVariablesFromObject(envVars);
+    // Set environment variables if requested
+    if (setEnvironmentVariables) {
+      setEnvironmentVariablesFromObject(envVars);
+    }
 
     return {
       success: true,
@@ -478,10 +481,22 @@ export function isBuiltInProvider(providerName: string): boolean {
  * @returns Default configuration name or null if not set
  */
 export function getCurrentDefaultConfiguration(configFile: ConfigFile): string | null {
-  if (!configFile.default_config || configFile.default_config.length === 0) {
-    return null;
+  // First check if there's an explicitly set default configuration
+  if (configFile.default_config && configFile.default_config.length > 0) {
+    return configFile.default_config[0]!.name;
   }
-  return configFile.default_config[0]!.name;
+  
+  // If no explicit default, look for a configuration with default: true
+  for (const configGroup of configFile.configs) {
+    for (const config of configGroup.config) {
+      if ((config as any).default === true) {
+        return config.name;
+      }
+    }
+  }
+  
+  // No default configuration found
+  return null;
 }
 
 /**

@@ -142,6 +142,8 @@ jspm_packages/
 *.md
 docs/
 bin/
+*.exe
+*.zip
 
 # User files
 !README*.md

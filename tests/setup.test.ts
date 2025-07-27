@@ -61,7 +61,7 @@ describe('Project Setup', () => {
 
     await main(['unknown-command']);
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockExit).toHaveBeenCalledWith(2);
     expect(consoleLogSpy).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Error: Unknown command: unknown-command');
 

@@ -110,7 +110,7 @@ describe('parseSetDefaultCommandArgs', () => {
     const result = parseSetDefaultCommandArgs([]);
     
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('Configuration name is required. Use --help for usage information.');
+    expect(result.error).toBe('Configuration name is required');
   });
 
   it('should fail when too many arguments provided', () => {
@@ -124,7 +124,7 @@ describe('parseSetDefaultCommandArgs', () => {
     const result = parseSetDefaultCommandArgs(['--unknown', 'config1']);
     
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('Unknown option: --unknown. Use --help for usage information.');
+    expect(result.error).toBe('Unknown option: --unknown');
   });
 
   it('should handle undefined arguments', () => {
@@ -257,9 +257,9 @@ describe('setDefaultCommand', () => {
     const result = await setDefaultCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('No configuration file found');
-    expect(result.details).toBe('No configuration file found in current directory');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Configuration file not found');
+    expect(result.details).toContain('Searched in the following locations:');
+    expect(result.exitCode).toBe(3);
   });
 
   it('should fail when configuration file is invalid', async () => {
@@ -277,8 +277,9 @@ describe('setDefaultCommand', () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('Configuration file validation failed');
-    expect(result.details).toBe('Errors: Invalid structure');
-    expect(result.exitCode).toBe(1);
+    expect(result.details).toContain('Configuration validation errors:');
+    expect(result.details).toContain('Invalid structure');
+    expect(result.exitCode).toBe(5);
   });
 
   it('should fail when specified configuration does not exist', async () => {
@@ -296,9 +297,11 @@ describe('setDefaultCommand', () => {
     const result = await setDefaultCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe("Configuration 'nonexistent-config' does not exist");
-    expect(result.details).toBe('Available configurations: openai-gpt4, azure-gpt35');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe("Configuration not found: 'nonexistent-config'");
+    expect(result.details).toContain('Available options:');
+    expect(result.details).toContain('openai-gpt4');
+    expect(result.details).toContain('azure-gpt35');
+    expect(result.exitCode).toBe(4);
   });
 
   it('should fail when unable to save configuration file', async () => {
@@ -317,8 +320,8 @@ describe('setDefaultCommand', () => {
     const result = await setDefaultCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Failed to save configuration file');
-    expect(result.details).toBe('Permission denied');
+    expect(result.message).toBe('Failed to save file');
+    expect(result.details).toContain('Permission denied');
     expect(result.exitCode).toBe(1);
   });
 
@@ -334,8 +337,8 @@ describe('setDefaultCommand', () => {
     const result = await setDefaultCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Unexpected error occurred while executing set-default command');
-    expect(result.details).toBe('Unexpected error');
+    expect(result.message).toBe('Unexpected error occurred during set-default command execution');
+    expect(result.details).toContain('Unexpected error');
     expect(result.exitCode).toBe(1);
   });
 });
@@ -372,24 +375,27 @@ describe('handleSetDefaultCommand', () => {
     const result = await handleSetDefaultCommand([]);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Configuration name is required. Use --help for usage information.');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Invalid arguments for command \'set-default\'');
+    expect(result.details).toContain('Configuration name is required');
+    expect(result.exitCode).toBe(2);
   });
 
   it('should handle too many arguments', async () => {
     const result = await handleSetDefaultCommand(['config1', 'config2']);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Too many arguments. Expected exactly one configuration name, got: config1, config2');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Invalid arguments for command \'set-default\'');
+    expect(result.details).toContain('Too many arguments. Expected exactly one configuration name, got: config1, config2');
+    expect(result.exitCode).toBe(2);
   });
 
   it('should handle unknown options', async () => {
     const result = await handleSetDefaultCommand(['--unknown', 'config1']);
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Unknown option: --unknown. Use --help for usage information.');
-    expect(result.exitCode).toBe(1);
+    expect(result.message).toBe('Invalid arguments for command \'set-default\'');
+    expect(result.details).toContain('Unknown option: --unknown');
+    expect(result.exitCode).toBe(2);
   });
 });
 

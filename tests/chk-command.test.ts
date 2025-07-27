@@ -151,7 +151,7 @@ describe('validateConfiguration', () => {
     expect(result.configName).toBe('openai-gpt4');
     expect(result.isValid).toBe(true);
     expect(result.errors).toHaveLength(0);
-    expect(result.warnings).toContain('This is the default configuration');
+    expect(result.warnings).toHaveLength(0); // No warnings for valid configuration
     expect(result.provider).toEqual({
       name: 'openai',
       baseUrl: 'https://api.openai.com/v1',
@@ -247,7 +247,7 @@ describe('chkCommand', () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toBe("Configuration 'openai-gpt4' is valid");
-    expect(result.details).toContain('This is the default configuration');
+    expect(result.details).toBe(''); // No warnings or errors, so details should be empty
     expect(result.exitCode).toBe(0);
   });
 

@@ -1,6 +1,6 @@
 /**
  * Command handlers for Qwen Code Router CLI
- * 
+ *
  * This module implements the core CLI commands including 'qcr use' for
  * activating configurations by name.
  */
@@ -10,11 +10,26 @@ import {
   getAllConfigurationNames,
   getCurrentDefaultConfiguration
 } from './resolver';
-import { discoverAndLoadConfig, saveConfigFile } from './persistence';
 import { validateEnvironmentVariables } from './environment';
 import { ConfigFile } from './types';
+import {
+  createErrorResult,
+  invalidArgumentsError,
+  createSuccessResult,
+  environmentNotSetError,
+  processLaunchError,
+  configFileNotFoundError,
+  configValidationError,
+  fileOperationError,
+  configNotFoundError,
+  unexpectedError,
+  EXIT_CODES
+} from './errors';
 import { ChildProcess } from 'child_process';
 import { spawnCrossPlatform } from './platform';
+import { discoverAndLoadConfig, saveConfigFile } from './persistence';
+import { UseCommandOptions } from './commands/use';
+import { useCommandHelp, useCommand } from './commands/use';
 
 /**
  * Result of a command execution
@@ -28,193 +43,6 @@ export interface CommandResult {
   details?: string | undefined;
   /** Exit code for the process */
   exitCode: number;
-}
-
-/**
- * Options for the use command
- */
-export interface UseCommandOptions {
-  /** Configuration name to use (optional - uses default if not provided) */
-  configName?: string;
-  /** Current working directory (optional - defaults to process.cwd()) */
-  currentDir?: string;
-  /** Whether to show verbose output */
-  verbose?: boolean;
-}
-
-/**
- * Implements the 'qcr use [config_name]' command
- * Activates a configuration by name, or uses default if no name provided
- * 
- * @param options - Command options
- * @returns CommandResult with execution status and message
- */
-export async function useCommand(options: UseCommandOptions = {}): Promise<CommandResult> {
-  try {
-    // Discover and load configuration file
-    let config: ConfigFile;
-    let validation: any;
-    let filePath: string;
-
-    try {
-      const result = await discoverAndLoadConfig(options.currentDir);
-      config = result.config;
-      validation = result.validation;
-      filePath = result.filePath;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('No configuration file found')) {
-        return {
-          success: false,
-          message: 'No configuration file found',
-          details: error.message,
-          exitCode: 1
-        };
-      } else if (error instanceof Error && error.message.includes('Failed to load configuration file')) {
-        return {
-          success: false,
-          message: 'Failed to load configuration file',
-          details: error.message,
-          exitCode: 1
-        };
-      } else {
-        throw error; // Re-throw unexpected errors
-      }
-    }
-
-    // Check if configuration file is valid
-    if (!validation.isValid) {
-      return {
-        success: false,
-        message: 'Configuration file validation failed',
-        details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
-        exitCode: 1
-      };
-    }
-
-    // Determine which configuration to use
-    let targetConfigName: string;
-    let useDefault = false;
-
-    if (options.configName) {
-      // Use specified configuration
-      targetConfigName = options.configName;
-    } else {
-      // Use default configuration
-      const defaultConfig = getCurrentDefaultConfiguration(config);
-      if (!defaultConfig) {
-        const availableConfigs = getAllConfigurationNames(config);
-        return {
-          success: false,
-          message: 'No default configuration set and no configuration name provided',
-          details: `Available configurations: ${availableConfigs.join(', ')}\nUse 'qcr set-default [config_name]' to set a default configuration.`,
-          exitCode: 1
-        };
-      }
-      targetConfigName = defaultConfig;
-      useDefault = true;
-    }
-
-    // Resolve the configuration
-    const resolutionResult = resolveConfigurationByName(targetConfigName, config);
-
-    if (!resolutionResult.success) {
-      return {
-        success: false,
-        message: `Failed to activate configuration '${targetConfigName}'`,
-        details: resolutionResult.error,
-        exitCode: 1
-      };
-    }
-
-    // Validate that environment variables were set correctly
-    const envValidation = validateEnvironmentVariables();
-    if (!envValidation.isValid) {
-      return {
-        success: false,
-        message: 'Environment variables validation failed after configuration activation',
-        details: `Errors: ${envValidation.errors.join(', ')}`,
-        exitCode: 1
-      };
-    }
-
-    // Build success message
-    const configSource = useDefault ? 'default configuration' : 'specified configuration';
-    const provider = resolutionResult.provider?.provider || 'unknown';
-    const model = resolutionResult.configEntry?.model || 'unknown';
-
-    let message = `Successfully activated ${configSource} '${targetConfigName}'`;
-    let details = `Provider: ${provider}, Model: ${model}`;
-
-    if (options.verbose) {
-      details += `\nConfiguration file: ${filePath}`;
-      details += `\nEnvironment variables set:`;
-      details += `\n  OPENAI_API_KEY: ${resolutionResult.environmentVariables?.OPENAI_API_KEY?.substring(0, 8)}...`;
-      details += `\n  OPENAI_BASE_URL: ${resolutionResult.environmentVariables?.OPENAI_BASE_URL}`;
-      details += `\n  OPENAI_MODEL: ${resolutionResult.environmentVariables?.OPENAI_MODEL}`;
-
-      if (envValidation.warnings.length > 0) {
-        details += `\nWarnings: ${envValidation.warnings.join(', ')}`;
-      }
-    }
-
-    return {
-      success: true,
-      message,
-      details,
-      exitCode: 0
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: 'Unexpected error occurred while executing use command',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      exitCode: 1
-    };
-  }
-}
-
-/**
- * Shows help information for the use command
- * @returns CommandResult with help information
- */
-export function useCommandHelp(): CommandResult {
-  const helpText = `
-qcr use - Activate a configuration
-
-USAGE:
-  qcr use [config_name]
-
-ARGUMENTS:
-  config_name    Name of the configuration to activate (optional)
-                 If not provided, uses the default configuration
-
-OPTIONS:
-  -v, --verbose  Show detailed output including environment variables
-  -h, --help     Show this help message
-
-EXAMPLES:
-  qcr use                    # Use default configuration
-  qcr use openai-gpt4        # Use specific configuration
-  qcr use azure-gpt35 -v     # Use configuration with verbose output
-
-DESCRIPTION:
-  The 'use' command activates a configuration by setting the required
-  environment variables (OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL).
-  
-  If no configuration name is provided, it will use the default configuration
-  if one is set. You can set a default configuration using:
-  
-    qcr set-default [config_name]
-  
-  The command will validate the configuration and ensure all required
-  environment variables are properly set before completing.
-`;
-
-  return {
-    success: true,
-    message: helpText.trim(),
-    exitCode: 0
-  };
 }
 
 /**
@@ -354,7 +182,7 @@ export function parseUseCommandArgs(args: string[]): {
     } else if (arg.startsWith('-')) {
       return {
         valid: false,
-        error: `Unknown option: ${arg}. Use --help for usage information.`
+        error: `Unknown option: ${arg}`
       };
     } else {
       // This should be the configuration name
@@ -387,11 +215,7 @@ export async function handleUseCommand(args: string[]): Promise<CommandResult> {
   const parseResult = parseUseCommandArgs(args);
 
   if (!parseResult.valid) {
-    return {
-      success: false,
-      message: parseResult.error || 'Invalid arguments',
-      exitCode: 1
-    };
+    return createErrorResult(invalidArgumentsError('use', parseResult.error || 'Invalid arguments', 'qcr use [config_name] [-v|--verbose]'));
   }
 
   if (parseResult.showHelp) {
@@ -423,17 +247,12 @@ export async function runCommand(options: RunCommandOptions = {}): Promise<Comma
     // Validate that required environment variables are set
     const envValidation = validateEnvironmentVariables();
     if (!envValidation.isValid) {
-      return {
-        success: false,
-        message: 'Cannot launch Qwen Code: required environment variables are not set',
-        details: `Missing or invalid environment variables: ${envValidation.errors.join(', ')}\n\nUse 'qcr use [config_name]' to activate a configuration first.`,
-        exitCode: 1
-      };
+      return createErrorResult(environmentNotSetError(envValidation.errors));
     }
 
     // Show warnings if any
     if (envValidation.warnings.length > 0 && options.verbose) {
-      console.warn(`Warnings: ${envValidation.warnings.join(', ')}`);
+      console.warn(`Warnings:\n${envValidation.warnings.map(w => `  ⚠ ${w}`).join('\n')}`);
     }
 
     // Prepare command arguments
@@ -457,38 +276,18 @@ export async function runCommand(options: RunCommandOptions = {}): Promise<Comma
 
       // Handle process errors
       child.on('error', (error) => {
-        if (error.message.includes('ENOENT')) {
-          resolve({
-            success: false,
-            message: 'Failed to launch Qwen Code: command not found',
-            details: 'Make sure Qwen Code is installed and the "qwen" command is available in your PATH.\n\nInstall Qwen Code from: https://github.com/QwenLM/qwen-code',
-            exitCode: 127
-          });
-        } else {
-          resolve({
-            success: false,
-            message: 'Failed to launch Qwen Code',
-            details: error.message,
-            exitCode: 1
-          });
-        }
+        resolve(createErrorResult(processLaunchError('Qwen Code', error.message)));
       });
 
       // Handle process exit
       child.on('exit', (code, signal) => {
         if (signal) {
-          resolve({
-            success: true,
-            message: `Qwen Code terminated by signal ${signal}`,
-            exitCode: 128 + (signal === 'SIGINT' ? 2 : signal === 'SIGTERM' ? 15 : 1)
-          });
+          const exitCode = signal === 'SIGINT' ? EXIT_CODES.INTERRUPTED : EXIT_CODES.GENERAL_ERROR;
+          resolve(createSuccessResult(`Qwen Code terminated by signal ${signal}`, undefined, exitCode));
         } else {
           const exitCode = code || 0;
-          resolve({
-            success: exitCode === 0,
-            message: exitCode === 0 ? 'Qwen Code completed successfully' : `Qwen Code exited with code ${exitCode}`,
-            exitCode
-          });
+          const message = exitCode === 0 ? 'Qwen Code completed successfully' : `Qwen Code exited with code ${exitCode}`;
+          resolve(createSuccessResult(message, undefined, exitCode));
         }
       });
 
@@ -516,12 +315,7 @@ export async function runCommand(options: RunCommandOptions = {}): Promise<Comma
       });
     });
   } catch (error) {
-    return {
-      success: false,
-      message: 'Unexpected error occurred while executing run command',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      exitCode: 1
-    };
+    return createErrorResult(unexpectedError('run command execution', error));
   }
 }
 
@@ -530,50 +324,9 @@ export async function runCommand(options: RunCommandOptions = {}): Promise<Comma
  * @returns CommandResult with help information
  */
 export function runCommandHelp(): CommandResult {
-  const helpText = `
-qcr run - Launch Qwen Code with active configuration
-
-USAGE:
-  qcr run [additional_args...]
-
-ARGUMENTS:
-  additional_args    Additional arguments to pass to the qwen command (optional)
-
-OPTIONS:
-  -v, --verbose      Show detailed output including environment variables
-  -h, --help         Show this help message
-
-EXAMPLES:
-  qcr run                           # Launch Qwen Code with current configuration
-  qcr run --help                    # Show Qwen Code help (passes --help to qwen)
-  qcr run -v                        # Launch with verbose output
-  qcr run --model-config custom.json  # Pass custom arguments to qwen
-
-DESCRIPTION:
-  The 'run' command launches Qwen Code using the currently active configuration.
-  It requires that environment variables are properly set using 'qcr use' first.
-  
-  The command validates that all required environment variables are present:
-  - OPENAI_API_KEY: API key for the service provider
-  - OPENAI_BASE_URL: Base URL for the API endpoint  
-  - OPENAI_MODEL: Model identifier to use
-  
-  Any additional arguments provided will be passed through to the underlying
-  'qwen' command. The process will inherit stdin/stdout/stderr, allowing for
-  interactive use.
-  
-  Signal handling (SIGINT/SIGTERM) is properly forwarded to the child process.
-
-PREREQUISITES:
-  - Qwen Code must be installed and available as 'qwen' command
-  - A configuration must be activated using 'qcr use [config_name]'
-`;
-
-  return {
-    success: true,
-    message: helpText.trim(),
-    exitCode: 0
-  };
+  // Import here to avoid circular dependency
+  const { getRunCommandHelp } = require('./help');
+  return getRunCommandHelp();
 }
 
 /**
@@ -621,11 +374,7 @@ export async function handleRunCommand(args: string[]): Promise<CommandResult> {
   const parseResult = parseRunCommandArgs(args);
 
   if (!parseResult.valid) {
-    return {
-      success: false,
-      message: parseResult.error || 'Invalid arguments',
-      exitCode: 1
-    };
+    return createErrorResult(invalidArgumentsError('run', parseResult.error || 'Invalid arguments', 'qcr run [additional_args...] [-v|--verbose]'));
   }
 
   if (parseResult.showHelp) {
@@ -668,19 +417,10 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
       filePath = result.filePath;
     } catch (error) {
       if (error instanceof Error && error.message.includes('No configuration file found')) {
-        return {
-          success: false,
-          message: 'No configuration file found',
-          details: error.message,
-          exitCode: 1
-        };
+        const searchPaths = error.message.split('Searched in:\n')[1]?.split('\n').map(p => p.trim().replace('- ', '')) || [];
+        return createErrorResult(configFileNotFoundError(searchPaths));
       } else if (error instanceof Error && error.message.includes('Failed to load configuration file')) {
-        return {
-          success: false,
-          message: 'Failed to load configuration file',
-          details: error.message,
-          exitCode: 1
-        };
+        return createErrorResult(fileOperationError('load', 'configuration file', error.message));
       } else {
         throw error; // Re-throw unexpected errors
       }
@@ -688,23 +428,13 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
 
     // Check if configuration file is valid
     if (!validation.isValid) {
-      return {
-        success: false,
-        message: 'Configuration file validation failed',
-        details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
-        exitCode: 1
-      };
+      return createErrorResult(configValidationError(validation.errors, validation.warnings));
     }
 
     // Validate that the specified configuration exists
     const availableConfigs = getAllConfigurationNames(config);
     if (!availableConfigs.includes(options.configName)) {
-      return {
-        success: false,
-        message: `Configuration '${options.configName}' does not exist`,
-        details: `Available configurations: ${availableConfigs.join(', ')}`,
-        exitCode: 1
-      };
+      return createErrorResult(configNotFoundError(options.configName, availableConfigs));
     }
 
     // Get current default configuration
@@ -722,12 +452,7 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
     try {
       await saveConfigFile(config, filePath);
     } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to save configuration file',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        exitCode: 1
-      };
+      return createErrorResult(fileOperationError('save', filePath, error instanceof Error ? error.message : 'Unknown error'));
     }
 
     // Build success message
@@ -747,19 +472,9 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
       details += `\nAvailable configurations: ${availableConfigs.join(', ')}`;
     }
 
-    return {
-      success: true,
-      message,
-      details,
-      exitCode: 0
-    };
+    return createSuccessResult(message, details);
   } catch (error) {
-    return {
-      success: false,
-      message: 'Unexpected error occurred while executing set-default command',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      exitCode: 1
-    };
+    return createErrorResult(unexpectedError('set-default command execution', error));
   }
 }
 
@@ -768,40 +483,9 @@ export async function setDefaultCommand(options: SetDefaultCommandOptions): Prom
  * @returns CommandResult with help information
  */
 export function setDefaultCommandHelp(): CommandResult {
-  const helpText = `
-qcr set-default - Set default configuration
-
-USAGE:
-  qcr set-default <config_name>
-
-ARGUMENTS:
-  config_name    Name of the configuration to set as default (required)
-
-OPTIONS:
-  -v, --verbose  Show detailed output including configuration file path
-  -h, --help     Show this help message
-
-EXAMPLES:
-  qcr set-default openai-gpt4    # Set openai-gpt4 as default configuration
-  qcr set-default azure-gpt35 -v # Set azure-gpt35 as default with verbose output
-
-DESCRIPTION:
-  The 'set-default' command sets a configuration as the default configuration
-  in the configuration file. The default configuration will be used when
-  running 'qcr use' without specifying a configuration name.
-  
-  The specified configuration must exist in the configuration file. Use
-  'qcr list config' to see all available configurations.
-  
-  The command updates the configuration file by setting the 'default_config'
-  section to point to the specified configuration name.
-`;
-
-  return {
-    success: true,
-    message: helpText.trim(),
-    exitCode: 0
-  };
+  // Import here to avoid circular dependency
+  const { getSetDefaultCommandHelp } = require('./help');
+  return getSetDefaultCommandHelp();
 }
 
 /**
@@ -830,7 +514,7 @@ export function parseSetDefaultCommandArgs(args: string[]): {
     } else if (arg.startsWith('-')) {
       return {
         valid: false,
-        error: `Unknown option: ${arg}. Use --help for usage information.`
+        error: `Unknown option: ${arg}`
       };
     } else {
       // This should be the configuration name
@@ -847,7 +531,7 @@ export function parseSetDefaultCommandArgs(args: string[]): {
   if (configName === undefined) {
     return {
       valid: false,
-      error: 'Configuration name is required. Use --help for usage information.'
+      error: 'Configuration name is required'
     };
   }
 
@@ -868,11 +552,7 @@ export async function handleSetDefaultCommand(args: string[]): Promise<CommandRe
   const parseResult = parseSetDefaultCommandArgs(args);
 
   if (!parseResult.valid) {
-    return {
-      success: false,
-      message: parseResult.error || 'Invalid arguments',
-      exitCode: 1
-    };
+    return createErrorResult(invalidArgumentsError('set-default', parseResult.error || 'Invalid arguments', 'qcr set-default <config_name> [-v|--verbose]'));
   }
 
   if (parseResult.showHelp) {
@@ -1132,12 +812,12 @@ export function listProviders(
     // If specific provider requested
     if (options.provider) {
       const provider = configFile.providers.find(p => p.provider.toLowerCase() === options.provider!.toLowerCase());
-      
+
       // If comprehensive flag is set, merge with built-in providers
       if (options.comprehensive) {
         const providerKey = options.provider.toLowerCase();
         const builtinProvider = BUILTIN_PROVIDERS[providerKey as keyof typeof BUILTIN_PROVIDERS];
-        
+
         if (!provider && !builtinProvider) {
           const availableProviders = [
             ...configFile.providers.map(p => p.provider),
@@ -1280,8 +960,8 @@ export function listProviders(
           }
           if (options.verbose) {
             details += `\n     Base URL: ${providerData.baseUrl}`;
-            details += `\n     Source: ${providerData.source === 'both' ? 'Configuration + Built-in' : 
-                                       providerData.source === 'config' ? 'Configuration file' : 'Built-in'}`;
+            details += `\n     Source: ${providerData.source === 'both' ? 'Configuration + Built-in' :
+              providerData.source === 'config' ? 'Configuration file' : 'Built-in'}`;
           }
         }
       } else {
@@ -1346,8 +1026,8 @@ export function listProviders(
       // Display merged providers
       for (const [providerName, providerData] of Array.from(allProviders.entries()).sort()) {
         if (options.verbose) {
-          const sourceText = providerData.source === 'both' ? 'Configuration + Built-in' : 
-                           providerData.source === 'config' ? 'Configuration file' : 'Built-in';
+          const sourceText = providerData.source === 'both' ? 'Configuration + Built-in' :
+            providerData.source === 'config' ? 'Configuration file' : 'Built-in';
           details += `\n  ${providerName} - ${providerData.modelCount} models (${providerData.baseUrl}) [${sourceText}]`;
         } else {
           details += `\n  ${providerName}`;
@@ -1706,6 +1386,8 @@ export interface ChkCommandOptions {
   currentDir?: string;
   /** Whether to show verbose output */
   verbose?: boolean;
+  /** Whether to test actual API connectivity */
+  testApi?: boolean;
 }
 
 /**
@@ -1734,7 +1416,82 @@ export interface ConfigValidationResult {
 }
 
 /**
- * Validates a specific configuration
+ * Validates a specific configuration with API call
+ * @param configName - Name of configuration to validate
+ * @param configFile - Configuration file to validate against
+ * @param testApi - Whether to test actual API connectivity (default: false)
+ * @returns Promise<ConfigValidationResult> with validation details
+ */
+export async function validateConfigurationWithApi(
+  configName: string, 
+  configFile: ConfigFile, 
+  testApi: boolean = false
+): Promise<ConfigValidationResult> {
+  // First do static validation
+  const result = validateConfiguration(configName, configFile);
+  
+  // If static validation failed or API testing is disabled, return early
+  if (!result.isValid || !testApi) {
+    return result;
+  }
+
+  // Get the configuration and provider for API testing
+  const configEntry = configFile.configs
+    .flatMap(c => c.config)
+    .find(c => c.name === configName);
+  
+  const provider = configFile.providers.find(p => p.provider === configEntry!.provider);
+  
+  if (!provider || !configEntry) {
+    return result;
+  }
+
+  // Test API connectivity
+  try {
+    const response = await fetch(`${provider.env.base_url}/models`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${provider.env.api_key}`,
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    });
+
+    if (!response.ok) {
+      result.isValid = false;
+      result.errors.push(`API test failed: ${response.status} ${response.statusText}`);
+      return result;
+    }
+
+    const data = await response.json() as any;
+    
+    // Check if the configured model is available in the API response
+    if (data && data.data && Array.isArray(data.data)) {
+      const availableModels = data.data.map((model: any) => model.id);
+      if (!availableModels.includes(configEntry.model)) {
+        result.isValid = false;
+        result.errors.push(`Model '${configEntry.model}' not available in API response`);
+      }
+    }
+    
+  } catch (error) {
+    result.isValid = false;
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        result.errors.push(`API test timeout: Unable to connect to ${provider.env.base_url}`);
+      } else {
+        result.errors.push(`API test failed: ${error.message}`);
+      }
+    } else {
+      result.errors.push(`API test failed: Unknown error`);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Validates a specific configuration (static validation only)
  * @param configName - Name of configuration to validate
  * @param configFile - Configuration file to validate against
  * @returns ConfigValidationResult with validation details
@@ -1798,11 +1555,8 @@ export function validateConfiguration(configName: string, configFile: ConfigFile
     }
   }
 
-  // Check if this is the default configuration
-  const isDefault = configFile.default_config?.some(dc => dc.name === configName);
-  if (isDefault) {
-    result.warnings.push(`This is the default configuration`);
-  }
+  // Note: Being the default configuration is not a warning condition
+  // It's normal and expected behavior, so we don't add any warning for this
 
   return result;
 }
@@ -1858,7 +1612,7 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
 
     // Get all available configurations
     const availableConfigs = getAllConfigurationNames(config);
-    
+
     if (availableConfigs.length === 0) {
       return {
         success: false,
@@ -1887,13 +1641,13 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
     // Validate configurations
     const validationResults: ConfigValidationResult[] = [];
     for (const configName of configsToValidate) {
-      validationResults.push(validateConfiguration(configName, config));
+      const result = await validateConfigurationWithApi(configName, config, options.testApi || false);
+      validationResults.push(result);
     }
 
     // Build result message
     const validConfigs = validationResults.filter(r => r.isValid);
     const invalidConfigs = validationResults.filter(r => !r.isValid);
-    const configsWithWarnings = validationResults.filter(r => r.warnings.length > 0);
 
     let message: string;
     let details = '';
@@ -1909,7 +1663,7 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
           exitCode: 1
         };
       }
-      
+
       if (result.isValid) {
         message = `Configuration '${result.configName}' is valid`;
         if (result.warnings.length > 0) {
@@ -1943,28 +1697,50 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
       // Multiple configuration validation
       if (invalidConfigs.length === 0) {
         message = `All ${validConfigs.length} configurations are valid`;
-        if (configsWithWarnings.length > 0) {
-          details += `${configsWithWarnings.length} configuration(s) have warnings`;
-        }
       } else {
-        message = `${invalidConfigs.length} of ${validationResults.length} configurations are invalid`;
+        const invalidCount = invalidConfigs.length;
+        const totalCount = validationResults.length;
+        if (invalidCount === 1) {
+          message = `${invalidCount} of ${totalCount} configurations is invalid`;
+        } else {
+          message = `${invalidCount} of ${totalCount} configurations are invalid`;
+        }
         success = false;
       }
 
-      // List validation results
+      // Get default configuration for marking
+      const defaultConfig = getCurrentDefaultConfiguration(config);
+
+      // Build compact configuration list on same line
+      const configList: string[] = [];
+      const errorDetails: string[] = [];
+      
       for (const result of validationResults) {
         const status = result.isValid ? '✓' : '✗';
         const warningCount = result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : '';
-        details += `\n  ${status} ${result.configName}${warningCount}`;
-        
-        if (options.verbose || !result.isValid) {
-          if (result.errors.length > 0) {
-            details += `\n    Errors: ${result.errors.join(', ')}`;
-          }
-          if (result.warnings.length > 0 && options.verbose) {
-            details += `\n    Warnings: ${result.warnings.join(', ')}`;
-          }
+        const defaultMarker = result.configName === defaultConfig ? ' (default)' : '';
+        configList.push(`${status} ${result.configName}${defaultMarker}${warningCount}`);
+
+        // Collect error details for invalid configurations
+        if (!result.isValid && result.errors.length > 0) {
+          errorDetails.push(`✗ ${result.configName}\nErrors: ${result.errors.join(', ')}`);
         }
+        
+        // Collect warning details if verbose mode
+        if (options.verbose && result.warnings.length > 0) {
+          errorDetails.push(`${status} ${result.configName}\nWarnings: ${result.warnings.join(', ')}`);
+        }
+      }
+      
+      // Add the compact configuration list (each on a new line with indentation)
+      // All items have two spaces indentation
+      if (configList.length > 0) {
+        details += '\n  ' + configList.join('\n  ');
+      }
+      
+      // Add error details after the configuration list
+      if (errorDetails.length > 0) {
+        details += '\n' + errorDetails.join('\n');
       }
 
       if (options.verbose) {
@@ -2005,20 +1781,29 @@ ARGUMENTS:
 
 OPTIONS:
   -v, --verbose  Show detailed validation information
+  --test-api     Test actual API connectivity (slower but more thorough)
   -h, --help     Show this help message
 
 EXAMPLES:
-  qcr chk                    # Validate all configurations
+  qcr chk                    # Validate all configurations (static validation only)
   qcr chk openai-gpt4        # Validate specific configuration
   qcr chk azure-gpt35 -v     # Validate configuration with detailed output
+  qcr chk --test-api         # Validate all configurations with API testing
 
 DESCRIPTION:
   The 'chk' command validates configurations to ensure they are properly
   set up and can be used successfully. It performs the following checks:
   
+  Static validation (default):
   - Configuration exists in the configuration file
   - Referenced provider exists in the providers section
   - Referenced model exists in the provider's model list
+  - Provider has required settings (API key, base URL)
+  
+  API validation (with --test-api):
+  - All static validation checks
+  - Actual API connectivity test
+  - Verify model availability through API call
   - Provider has required settings (API key, base URL)
   - Provider has at least one model configured
   
@@ -2060,6 +1845,8 @@ export function parseChkCommandArgs(args: string[]): {
       return { valid: true, showHelp: true };
     } else if (arg === '-v' || arg === '--verbose') {
       options.verbose = true;
+    } else if (arg === '--test-api') {
+      options.testApi = true;
     } else if (arg.startsWith('-')) {
       return {
         valid: false,
@@ -2169,11 +1956,11 @@ export async function routerCommand(options: RouterCommandOptions): Promise<Comm
     if (hasConfigFile) {
       // Find provider in config file (case-insensitive)
       configProvider = config.providers.find(p => p.provider.toLowerCase() === providerKey);
-      
+
       if (configProvider) {
         // Check if the model exists in this provider
         const modelExists = configProvider.env.models.some((m: any) => m.model.toLowerCase() === inputModel.toLowerCase());
-        
+
         if (modelExists) {
           // Look for existing configuration that matches this provider/model combination
           matchingConfig = config.configs
@@ -2186,7 +1973,7 @@ export async function routerCommand(options: RouterCommandOptions): Promise<Comm
     // Check built-in providers
     const builtinProvider = BUILTIN_PROVIDERS[providerKey as keyof typeof BUILTIN_PROVIDERS];
     let builtinModelExists = false;
-    
+
     if (builtinProvider) {
       builtinModelExists = builtinProvider.models.some(m => m.toLowerCase() === inputModel.toLowerCase());
     }
@@ -2200,7 +1987,7 @@ export async function routerCommand(options: RouterCommandOptions): Promise<Comm
     if (matchingConfig) {
       // Use existing configuration
       const resolutionResult = resolveConfigurationByName(matchingConfig.name, config);
-      
+
       if (!resolutionResult.success) {
         return {
           success: false,
@@ -2217,7 +2004,7 @@ export async function routerCommand(options: RouterCommandOptions): Promise<Comm
     } else if (configProvider && configProvider.env.models.some((m: any) => m.model.toLowerCase() === inputModel.toLowerCase())) {
       // Use config file provider with direct model match
       const exactModel = configProvider.env.models.find((m: any) => m.model.toLowerCase() === inputModel.toLowerCase());
-      
+
       // Set environment variables directly
       process.env['OPENAI_API_KEY'] = configProvider.env.api_key;
       process.env['OPENAI_BASE_URL'] = configProvider.env.base_url;
@@ -2230,7 +2017,7 @@ export async function routerCommand(options: RouterCommandOptions): Promise<Comm
     } else if (builtinProvider && builtinModelExists) {
       // Use built-in provider
       const exactModel = builtinProvider.models.find(m => m.toLowerCase() === inputModel.toLowerCase());
-      
+
       if (!exactModel) {
         return {
           success: false,

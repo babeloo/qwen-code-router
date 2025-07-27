@@ -4,14 +4,16 @@
  */
 
 import {
-  useCommand,
-  useCommandHelp,
   listConfigurations,
   getCurrentStatus,
   parseUseCommandArgs,
-  handleUseCommand,
-  UseCommandOptions
+  handleUseCommand
 } from '../src/commands';
+import {
+  useCommand,
+  useCommandHelp,
+  UseCommandOptions
+} from '../src/commands/use';
 import { ConfigFile } from '../src/types';
 import { REQUIRED_ENV_VARS } from '../src/environment';
 import * as fs from 'fs';
@@ -192,9 +194,9 @@ describe('CLI Command Handlers', () => {
       const result = await useCommand(options);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Failed to activate configuration 'nonexistent-config'");
-      expect(result.details).toContain('Configuration "nonexistent-config" not found');
-      expect(result.exitCode).toBe(1);
+      expect(result.message).toContain("Configuration not found: 'nonexistent-config'");
+      expect(result.details).toContain('Available options:');
+      expect(result.exitCode).toBe(4);
     });
 
     it('should fail when no default configuration is set and no name provided', async () => {
@@ -215,9 +217,9 @@ describe('CLI Command Handlers', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('No default configuration set and no configuration name provided');
-      expect(result.details).toContain('Available configurations:');
+      expect(result.details).toContain('Available options:');
       expect(result.details).toContain('qcr set-default');
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(4);
     });
 
     it('should fail when configuration file is invalid', async () => {
@@ -232,7 +234,7 @@ describe('CLI Command Handlers', () => {
       const result = await useCommand(options);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Failed to load configuration file');
+      expect(result.message).toContain('Failed to load file');
       expect(result.exitCode).toBe(1);
     });
 
@@ -245,8 +247,8 @@ describe('CLI Command Handlers', () => {
       const result = await useCommand(options);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('No configuration file found');
-      expect(result.exitCode).toBe(1);
+      expect(result.message).toContain('Configuration file not found');
+      expect(result.exitCode).toBe(3);
     });
 
     it('should handle provider validation errors', async () => {
@@ -269,7 +271,7 @@ describe('CLI Command Handlers', () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain('Configuration file validation failed');
       expect(result.details).toContain('Provider "openai" not found');
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(5);
     });
   });
 
@@ -456,8 +458,8 @@ describe('CLI Command Handlers', () => {
       const result = await handleUseCommand(['--invalid-option']);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Unknown option: --invalid-option');
-      expect(result.exitCode).toBe(1);
+      expect(result.message).toContain('Invalid arguments for command \'use\'');
+      expect(result.exitCode).toBe(2);
     });
 
     it('should handle verbose flag', async () => {
