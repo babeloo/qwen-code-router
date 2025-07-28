@@ -13,21 +13,30 @@ module.exports = {
       }
     }],
   },
+  collectCoverage: true,
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
   ],
-  coverageDirectory: 'coverage',
+  coverageDirectory: 'reports/coverage',
   coverageReporters: [
     'text',
     'lcov',
     'html'
   ],
+  coverageThreshold:{
+    global: {
+      branches: 80,
+      functions: 90,
+      lines: 90,
+      statements: 85
+    }
+  },
   reporters: [
     "default", // 保留终端输出
     ["jest-html-reporter", {
       pageTitle: "测试报告",
-      outputPath: "test-report.html" // 报告文件路径
+      outputPath: "reports/test-report.html" // 报告文件路径
     }]
   ]
 };

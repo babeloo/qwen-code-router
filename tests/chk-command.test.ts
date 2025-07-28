@@ -3,7 +3,7 @@
  */
 
 import { handleChkCommand } from '../src/commands';
-import { chkCommand, parseChkCommandArgs, validateConfiguration, ChkCommandOptions } from '../src/commands/chk';
+import { chkCommand, parseChkCommandArgs, validateConfiguration, validateConfigurationWithApi, ChkCommandOptions } from '../src/commands/chk';
 import * as persistence from '../src/persistence';
 import { ConfigFile } from '../src/types';
 
@@ -102,12 +102,27 @@ describe('parseChkCommandArgs', () => {
     expect(result.options?.verbose).toBe(true);
   });
 
+  it('should parse test-api flag', () => {
+    const result = parseChkCommandArgs(['--test-api']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.testApi).toBe(true);
+  });
+
   it('should parse configuration name with verbose flag', () => {
     const result = parseChkCommandArgs(['azure-gpt35', '-v']);
     
     expect(result.valid).toBe(true);
     expect(result.options?.configName).toBe('azure-gpt35');
     expect(result.options?.verbose).toBe(true);
+  });
+
+  it('should parse configuration name with test-api flag', () => {
+    const result = parseChkCommandArgs(['openai-gpt4', '--test-api']);
+    
+    expect(result.valid).toBe(true);
+    expect(result.options?.configName).toBe('openai-gpt4');
+    expect(result.options?.testApi).toBe(true);
   });
 
   it('should parse help flag', () => {
@@ -196,6 +211,28 @@ describe('validateConfiguration', () => {
     expect(result.warnings).toContain("No API key configured for provider 'anthropic'");
   });
 
+  it('should warn about empty base URL', () => {
+    const configWithEmptyBaseUrl: ConfigFile = {
+      ...sampleConfig,
+      providers: [
+        {
+          provider: 'openai',
+          env: {
+            api_key: 'test-openai-key',
+            base_url: '',
+            models: [{ model: 'gpt-4' }]
+          }
+        }
+      ]
+    };
+    
+    const result = validateConfiguration('openai-gpt4', configWithEmptyBaseUrl);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(true);
+    expect(result.warnings).toContain("No base URL configured for provider 'openai'");
+  });
+
   it('should warn about provider with no models', () => {
     // Add a configuration that uses the empty-models provider
     const configWithEmptyModels: ConfigFile = {
@@ -221,6 +258,133 @@ describe('validateConfiguration', () => {
     expect(result.configName).toBe('azure-gpt35');
     expect(result.isValid).toBe(true);
     expect(result.warnings).not.toContain('This is the default configuration');
+  });
+});
+
+describe('validateConfigurationWithApi', () => {
+  // Mock fetch globally
+  const mockFetch = jest.fn();
+  global.fetch = mockFetch as any;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('should return static validation result when testApi is false', async () => {
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, false);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should test API connectivity successfully', async () => {
+    // Mock successful API response
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'gpt-4' },
+          { id: 'gpt-3.5-turbo' }
+        ]
+      })
+    } as any);
+
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, true);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/models',
+      expect.objectContaining({
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer test-openai-key',
+          'Content-Type': 'application/json'
+        },
+        signal: expect.any(AbortSignal)
+      })
+    );
+  });
+
+  it('should handle API test failure with non-ok response', async () => {
+    // Mock failed API response
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized'
+    } as any);
+
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, true);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("API test failed: 401 Unauthorized");
+  });
+
+  it('should handle API test failure with model not available', async () => {
+    // Mock successful API response but with different models
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'gpt-3.5-turbo' },
+          { id: 'other-model' }
+        ]
+      })
+    } as any);
+
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, true);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("Model 'gpt-4' not available in API response");
+  });
+
+  it('should handle API test timeout', async () => {
+    // Mock timeout error
+    const timeoutError = new Error('Timeout error');
+    timeoutError.name = 'AbortError';
+    mockFetch.mockRejectedValue(timeoutError);
+
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, true);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("API test timeout: Unable to connect to https://api.openai.com/v1");
+  });
+
+  it('should handle API test general error', async () => {
+    // Mock general error
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, true);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("API test failed: Network error");
+  });
+
+  it('should handle API test unknown error', async () => {
+    // Mock unknown error
+    mockFetch.mockRejectedValue('Unknown error');
+
+    const result = await validateConfigurationWithApi('openai-gpt4', sampleConfig, true);
+    
+    expect(result.configName).toBe('openai-gpt4');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("API test failed: Unknown error");
+  });
+
+  it('should return static validation result when configuration is invalid', async () => {
+    const result = await validateConfigurationWithApi('invalid-provider', sampleConfig, true);
+    
+    expect(result.configName).toBe('invalid-provider');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("Provider 'nonexistent' not found in providers section");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
@@ -301,8 +465,8 @@ describe('chkCommand', () => {
     const result = await chkCommand(options);
 
     expect(result.success).toBe(false);
-    expect(result.details).toContain('Errors: Provider \'nonexistent\' not found in providers section');
-    expect(result.details).toContain('Warnings: No API key configured for provider \'anthropic\'');
+    expect(result.details).toContain("Errors: Provider 'nonexistent' not found in providers section");
+    expect(result.details).toContain("Warnings: No API key configured for provider 'anthropic'");
     expect(result.details).toContain('Configuration file: /test/config.yaml');
   });
 
@@ -315,7 +479,7 @@ describe('chkCommand', () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toBe("Configuration 'nonexistent' does not exist");
-    expect(result.details).toContain('Available configurations: openai-gpt4, azure-gpt35, anthropic-claude, invalid-provider, invalid-model');
+    expect(result.details).toContain("Available configurations: openai-gpt4, azure-gpt35, anthropic-claude, invalid-provider, invalid-model");
     expect(result.exitCode).toBe(1);
   });
 
@@ -418,6 +582,76 @@ describe('chkCommand', () => {
     expect(result.message).toBe('All 2 configurations are valid');
     expect(result.exitCode).toBe(0);
   });
+
+  it('should handle single invalid configuration with warnings', async () => {
+    const options: ChkCommandOptions = {
+      configName: 'anthropic-claude'
+    };
+
+    const result = await chkCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Configuration 'anthropic-claude' is valid");
+    expect(result.details).toContain("Warnings:");
+    expect(result.details).toContain("No API key configured for provider 'anthropic'");
+  });
+
+  it('should handle single invalid configuration with errors and warnings', async () => {
+    const configWithWarningsAndErrors: ConfigFile = {
+      ...sampleConfig,
+      configs: [{
+        config: [
+          ...(sampleConfig.configs[0]?.config || []),
+          { name: 'warning-and-error', provider: 'openai', model: 'nonexistent-model' }
+        ]
+      }],
+      providers: [
+        {
+          provider: 'openai',
+          env: {
+            api_key: '',
+            base_url: 'https://api.openai.com/v1',
+            models: [{ model: 'gpt-4' }]
+          }
+        }
+      ]
+    };
+
+    mockDiscoverAndLoadConfig.mockResolvedValue({
+      config: configWithWarningsAndErrors,
+      validation: { isValid: true, errors: [], warnings: [] },
+      filePath: '/test/config.yaml'
+    });
+
+    const options: ChkCommandOptions = {
+      configName: 'warning-and-error'
+    };
+
+    const result = await chkCommand(options);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("Configuration 'warning-and-error' is invalid");
+    expect(result.details).toContain("Errors:");
+    expect(result.details).toContain("Model 'nonexistent-model' not found in provider 'openai'");
+    expect(result.details).toContain("Warnings:");
+    expect(result.details).toContain("No API key configured for provider 'openai'");
+  });
+
+  it('should handle single configuration with verbose and warnings', async () => {
+    const options: ChkCommandOptions = {
+      configName: 'anthropic-claude',
+      verbose: true
+    };
+
+    const result = await chkCommand(options);
+
+    expect(result.success).toBe(true);
+    expect(result.details).toContain("Provider details:");
+    expect(result.details).toContain("Model details:");
+    expect(result.details).toContain("Configuration file: /test/config.yaml");
+    expect(result.details).toContain("Warnings:");
+    expect(result.details).toContain("No API key configured for provider 'anthropic'");
+  });
 });
 
 describe('handleChkCommand', () => {
@@ -442,6 +676,26 @@ describe('handleChkCommand', () => {
     expect(result.success).toBe(true);
     expect(result.details).toContain('Provider details:');
     expect(result.details).toContain('Model details:');
+  });
+
+  it('should handle test-api flag', async () => {
+    // Mock fetch for API testing
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'gpt-4' },
+          { id: 'gpt-3.5-turbo' }
+        ]
+      })
+    });
+    global.fetch = mockFetch as any;
+    
+    const result = await handleChkCommand(['openai-gpt4', '--test-api']);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Configuration 'openai-gpt4' is valid");
+    expect(mockFetch).toHaveBeenCalled();
   });
 
   it('should handle help flag', async () => {

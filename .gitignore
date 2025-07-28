@@ -37,10 +37,10 @@ bin/qcr-linux
 bin/qcr-darwin
 
 # Test coverage
+reports/
 coverage/
 .nyc_output/
 .jest/
-test-report.html
 
 # Logs
 logs/
