@@ -73,12 +73,11 @@ pids/
 .env.production
 
 # Configuration files (local/user-specific)
-config.json
-config.yaml
-config.yml
-test-config.json
-test-config.yaml
-test-config.yml
+*config*.json
+*config*.yaml
+*config*.yml
+!config.example.json
+!config.example.yaml
 
 # Editor/IDE files
 .vscode/*

@@ -44,7 +44,7 @@ GLOBAL OPTIONS:
   -v, --verbose            Show detailed output
 
 EXAMPLES:
-  qcr use openai-gpt4      # Activate the openai-gpt4 configuration
+  qcr use openai-gpt4      # Generate shell commands for openai-gpt4 configuration
   qcr run                  # Launch Qwen Code with active configuration
   qcr run --help           # Show Qwen Code help (passes --help to qwen)
   qcr list config          # List all available configurations
@@ -108,8 +108,8 @@ ARGUMENTS:
                  If not provided, uses the default configuration
 
 OPTIONS:
-  -v, --verbose  Show detailed output including environment variables
-  -h, --help     Show this help message
+  -v, --verbose          Show detailed output including environment variables
+  -h, --help             Show this help message
 
 EXAMPLES:
   qcr use                    # Activate the default configuration
@@ -123,6 +123,9 @@ BEHAVIOR:
   
   After successful activation, you can run 'qcr run' to launch Qwen Code with
   the activated configuration.
+  
+  After setting the environment variables, you can run 'qwen' directly or
+  use 'qcr run' to launch Qwen Code with the activated configuration.
 
 ERROR HANDLING:
   - Configuration file not found: Create config.yaml or config.json
@@ -230,6 +233,8 @@ CONFIGURATION FILE:
 
   return createSuccessResult(helpText.trim());
 }
+
+
 
 /**
  * Get context-sensitive help based on command

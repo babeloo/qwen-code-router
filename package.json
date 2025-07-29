@@ -21,11 +21,13 @@
     "version:minor": "pnpm version minor",
     "version:major": "pnpm version major",
     "pack:win": "pkg dist/cli.js --targets node18-win-x64 --output qcr.exe",
+    "pack:win-test": "pnpm prepublishOnly && pnpm pack:win",
     "pack:linux": "pkg dist/cli.js --targets node18-linux-x64 --output qcr",
     "pack:macos": "pkg dist/cli.js --targets node18-macos-x64 --output qcr",
     "pack:all": "pnpm run pack:win && pnpm run pack:linux && pnpm run pack:macos",
     "package:release": "node scripts/package-release.js",
     "package:github": "pnpm run clean && pnpm run build && pnpm run package:release",
+    "test:coverage": "pnpm test -- --coverage",
     "test:packaging": "node scripts/test-packaging.js"
   },
   "keywords": [

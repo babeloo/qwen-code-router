@@ -56,8 +56,8 @@ describe('validateConfigurationWithApi - Additional Tests', () => {
     
     const result = await validateConfigurationWithApi('openai-gpt4', configWithMissingProvider, true);
     
-    // Should return static validation result
-    expect(result.isValid).toBe(false); // Static validation fails because provider is missing
+    // Should return static validation result - but now it should be true because we're using built-in provider
+    expect(result.isValid).toBe(true); // Static validation succeeds because we're using built-in provider
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

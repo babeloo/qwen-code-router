@@ -265,9 +265,8 @@ describe('CLI Command Handlers', () => {
       const result = await useCommand(options);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Configuration file validation failed');
-      expect(result.details).toContain('Provider "openai" not found');
-      expect(result.exitCode).toBe(5);
+      expect(result.message).toBe("Configuration not found: 'openai-gpt4'"); // Updated expectation
+      expect(result.exitCode).toBe(4); // Updated exit code
     });
   });
 

@@ -20,7 +20,6 @@ import {
   environmentValidationError
 } from '../errors';
 import { CommandResult } from '../commands';
-import { parseFlags } from '../command-args';
 
 /**
  * Options for the use command
@@ -136,38 +135,35 @@ export function parseUseCommandArgs(args: string[]): {
   error?: string | undefined;
   showHelp?: boolean | undefined;
 } {
-  const { parsedFlags, remainingArgs } = parseFlags(args, {
-    help: ['-h', '--help'],
-    verbose: ['-v', '--verbose']
-  });
-
-  if (parsedFlags['help']) {
-    return { valid: true, showHelp: true };
+  const options: UseCommandOptions = {};
+  const remainingArgs: string[] = [];
+  
+  // Manual parsing for options
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (!arg) continue; // Skip undefined/empty arguments
+    
+    if (arg === '-h' || arg === '--help') {
+      return { valid: true, showHelp: true };
+    } else if (arg === '-v' || arg === '--verbose') {
+      options.verbose = true;
+    } else if (arg.startsWith('-')) {
+      return {
+        valid: false,
+        error: `Unknown option: ${arg}`
+      };
+    } else {
+      remainingArgs.push(arg);
+    }
   }
 
-  // 验证参数数量
+  // Validate remaining arguments
   if (remainingArgs.length > 1) {
     return {
       valid: false,
       error: `Too many arguments. Expected at most one configuration name, got: ${remainingArgs.join(', ')}`
     };
-  }
-  
-  // Check for unknown flags
-  for (const arg of args) {
-    if (arg && arg.startsWith('-') && arg !== '-h' && arg !== '--help' && arg !== '-v' && arg !== '--verbose') {
-      return {
-        valid: false,
-        error: `Unknown option: ${arg}`
-      };
-    }
-  }
-
-  const options: UseCommandOptions = {};
-  
-  // Only add verbose property if it was explicitly set
-  if (parsedFlags['verbose']) {
-    options.verbose = true;
   }
 
   if (remainingArgs.length > 0) {

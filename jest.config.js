@@ -13,7 +13,7 @@ module.exports = {
       }
     }],
   },
-  collectCoverage: true,
+  collectCoverage: false, // 默认不收集覆盖率
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

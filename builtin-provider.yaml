@@ -1,0 +1,48 @@
+# Built-in Provider Configuration
+# This file contains the built-in provider definitions for Qwen Code Router
+# These providers are available by default and don't need to be defined in the main config
+
+providers:
+  - provider: openai
+    env:
+      base_url: "https://api.openai.com/v1"
+      models:
+        - model: "gpt-4"
+        - model: "gpt-4-turbo"
+        - model: "gpt-4-turbo-preview"
+        - model: "gpt-4-0125-preview"
+        - model: "gpt-4-1106-preview"
+        - model: "gpt-3.5-turbo"
+        - model: "gpt-3.5-turbo-0125"
+        - model: "gpt-3.5-turbo-1106"
+        - model: "gpt-3.5-turbo-16k"
+
+  - provider: azure
+    env:
+      base_url: "https://[resource].openai.azure.com/openai"
+      models:
+        - model: "gpt-4"
+        - model: "gpt-4-turbo"
+        - model: "gpt-4-32k"
+        - model: "gpt-35-turbo"
+        - model: "gpt-35-turbo-16k"
+
+  - provider: anthropic
+    env:
+      base_url: "https://api.anthropic.com/v1"
+      models:
+        - model: "claude-3-opus-20240229"
+        - model: "claude-3-sonnet-20240229"
+        - model: "claude-3-haiku-20240307"
+        - model: "claude-2.1"
+        - model: "claude-2.0"
+        - model: "claude-instant-1.2"
+
+  - provider: google
+    env:
+      base_url: "https://generativelanguage.googleapis.com/v1"
+      models:
+        - model: "gemini-pro"
+        - model: "gemini-pro-vision"
+        - model: "gemini-1.5-pro"
+        - model: "gemini-1.5-flash"

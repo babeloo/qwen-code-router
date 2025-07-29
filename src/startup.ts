@@ -11,7 +11,7 @@
 
 import { discoverAndLoadConfig } from './persistence';
 import { getCurrentDefaultConfiguration, resolveConfigurationByName } from './resolver';
-import { validateEnvironmentVariables } from './environment';
+import { validateEnvironmentVariables, getCurrentEnvironmentVariables, REQUIRED_ENV_VARS } from './environment';
 import { ConfigFile } from './types';
 import {
   createSuccessResult,
@@ -72,13 +72,19 @@ export async function executeStartupFlow(currentDir?: string): Promise<StartupFl
       filePath = result.filePath;
     } catch (error) {
       if (error instanceof Error && error.message.includes('No configuration file found')) {
-        return {
-          success: false,
-          currentStep: StartupStep.FAILED,
-          errorMessage: 'Configuration file not found',
-          errorDetails: error.message,
-          exitCode: EXIT_CODES.CONFIG_NOT_FOUND
-        };
+        // Phase 1 startup flow: Check for environment variable fallback
+        const envFallbackResult = checkEnvironmentVariableFallback();
+        if (envFallbackResult.success) {
+          return envFallbackResult;
+        } else {
+          return {
+            success: false,
+            currentStep: StartupStep.FAILED,
+            errorMessage: 'Configuration file not found and environment variables not set',
+            errorDetails: envFallbackResult.errorDetails || error.message,
+            exitCode: EXIT_CODES.CONFIG_NOT_FOUND
+          };
+        }
       } else {
         return {
           success: false,
@@ -190,13 +196,19 @@ export async function validateStartupFlow(currentDir?: string): Promise<StartupF
       filePath = result.filePath;
     } catch (error) {
       if (error instanceof Error && error.message.includes('No configuration file found')) {
-        return {
-          success: false,
-          currentStep: StartupStep.CHECKING_CONFIG_FILE,
-          errorMessage: 'Configuration file not found',
-          errorDetails: error.message,
-          exitCode: EXIT_CODES.CONFIG_NOT_FOUND
-        };
+        // Phase 1 startup flow: Check for environment variable fallback
+        const envFallbackResult = checkEnvironmentVariableFallback();
+        if (envFallbackResult.success) {
+          return envFallbackResult;
+        } else {
+          return {
+            success: false,
+            currentStep: StartupStep.CHECKING_CONFIG_FILE,
+            errorMessage: 'Configuration file not found and environment variables not set',
+            errorDetails: envFallbackResult.errorDetails || error.message,
+            exitCode: EXIT_CODES.CONFIG_NOT_FOUND
+          };
+        }
       } else {
         return {
           success: false,
@@ -401,4 +413,67 @@ export async function isReadyToLaunch(currentDir?: string): Promise<boolean> {
  */
 export async function getStartupStatus(currentDir?: string): Promise<StartupFlowResult> {
   return await validateStartupFlow(currentDir);
+}
+
+/**
+ * Checks for environment variable fallback when configuration file doesn't exist
+ * This implements Phase 1 startup flow requirement 6.3, 6.4, 6.5
+ * @returns StartupFlowResult indicating success or failure of environment variable fallback
+ */
+function checkEnvironmentVariableFallback(): StartupFlowResult {
+  try {
+    // Check if all required environment variables are already set
+    const currentEnv = getCurrentEnvironmentVariables();
+    
+    const hasApiKey = currentEnv.OPENAI_API_KEY && currentEnv.OPENAI_API_KEY.trim() !== '';
+    const hasBaseUrl = currentEnv.OPENAI_BASE_URL && currentEnv.OPENAI_BASE_URL.trim() !== '';
+    const hasModel = currentEnv.OPENAI_MODEL && currentEnv.OPENAI_MODEL.trim() !== '';
+
+    if (hasApiKey && hasBaseUrl && hasModel) {
+      // All required environment variables are present, validate them
+      const envValidation = validateEnvironmentVariables();
+      
+      if (envValidation.isValid) {
+        return {
+          success: true,
+          currentStep: StartupStep.READY,
+          exitCode: EXIT_CODES.SUCCESS
+        };
+      } else {
+        return {
+          success: false,
+          currentStep: StartupStep.FAILED,
+          errorMessage: 'Environment variables are set but invalid',
+          errorDetails: `Validation errors: ${envValidation.errors.join(', ')}`,
+          exitCode: EXIT_CODES.ENVIRONMENT_ERROR
+        };
+      }
+    } else {
+      // Not all required environment variables are present
+      const missingVars: string[] = [];
+      if (!hasApiKey) missingVars.push(REQUIRED_ENV_VARS.API_KEY);
+      if (!hasBaseUrl) missingVars.push(REQUIRED_ENV_VARS.BASE_URL);
+      if (!hasModel) missingVars.push(REQUIRED_ENV_VARS.MODEL);
+
+      return {
+        success: false,
+        currentStep: StartupStep.FAILED,
+        errorMessage: 'Configuration file not found and required environment variables not set',
+        errorDetails: `Missing environment variables: ${missingVars.join(', ')}\n\n` +
+                     'Either create a configuration file or set all required environment variables:\n' +
+                     `  ${REQUIRED_ENV_VARS.API_KEY}=your_api_key\n` +
+                     `  ${REQUIRED_ENV_VARS.BASE_URL}=your_base_url\n` +
+                     `  ${REQUIRED_ENV_VARS.MODEL}=your_model`,
+        exitCode: EXIT_CODES.CONFIG_NOT_FOUND
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      currentStep: StartupStep.FAILED,
+      errorMessage: 'Error during environment variable fallback check',
+      errorDetails: error instanceof Error ? error.message : 'Unknown error',
+      exitCode: EXIT_CODES.GENERAL_ERROR
+    };
+  }
 }

@@ -3,7 +3,7 @@
  */
 
 import { loadConfigFile } from '../command-utils';
-import { getAllConfigurationNames, getCurrentDefaultConfiguration } from '../resolver';
+import { getAllConfigurationNames, getCurrentDefaultConfiguration, BUILT_IN_PROVIDERS } from '../resolver';
 import { CommandResult } from '../commands';
 import { ConfigFile } from '../types';
 import { parseFlags } from '../command-args';
@@ -148,22 +148,86 @@ export function validateConfiguration(configName: string, configFile: ConfigFile
   }
 
   // Validate provider exists
-  const provider = configFile.providers.find(p => p.provider === configEntry.provider);
+  const provider = configFile.providers?.find(p => p.provider === configEntry.provider);
   if (!provider) {
-    result.isValid = false;
-    result.errors.push(`Provider '${configEntry.provider}' not found in providers section`);
+    // Check if it's a built-in provider
+    const normalizedProvider = configEntry.provider.toLowerCase();
+    const isBuiltInProvider = Object.keys(BUILT_IN_PROVIDERS).includes(normalizedProvider);
+    if (!isBuiltInProvider) {
+      result.isValid = false;
+      result.errors.push(`Provider '${configEntry.provider}' not found in providers section`);
+      return result; // Early return when provider is missing
+    } else {
+      // For built-in providers, use built-in defaults
+      const builtInProvider = BUILT_IN_PROVIDERS[normalizedProvider];
+      if (builtInProvider) {
+        result.provider = {
+          name: configEntry.provider,
+          baseUrl: builtInProvider.baseUrl,
+          modelCount: builtInProvider.models.length
+        };
+        
+        // Validate model exists in built-in provider
+        const modelSupported = builtInProvider.models.includes(configEntry.model);
+        if (!modelSupported) {
+          result.isValid = false;
+          result.errors.push(`Model '${configEntry.model}' not found in built-in provider '${configEntry.provider}'. Supported models: ${builtInProvider.models.join(', ')}`);
+        } else {
+          result.model = {
+            name: configEntry.model,
+            isSupported: true
+          };
+        }
+        
+        // Add warning about API key
+        result.warnings.push(`Using built-in provider '${configEntry.provider}'. API key must be set via environment variable at runtime.`);
+      } else {
+        result.isValid = false;
+        result.errors.push(`Built-in provider '${configEntry.provider}' found but configuration is invalid`);
+      }
+    }
   } else {
+    // Check if it's a built-in provider
+    const normalizedProvider = provider.provider.toLowerCase();
+    const isBuiltInProvider = Object.keys(BUILT_IN_PROVIDERS).includes(normalizedProvider);
+    const builtInProvider = isBuiltInProvider ? BUILT_IN_PROVIDERS[normalizedProvider] : undefined;
+    
     result.provider = {
       name: provider.provider,
-      baseUrl: provider.env.base_url,
-      modelCount: provider.env.models.length
+      baseUrl: provider.env.base_url || builtInProvider?.baseUrl || '',
+      modelCount: provider.env.models?.length || builtInProvider?.models.length || 0
     };
 
     // Validate model exists in provider
-    const model = provider.env.models.find(m => m.model === configEntry.model);
+    const model = provider.env.models?.find(m => m.model === configEntry.model);
     if (!model) {
-      result.isValid = false;
-      result.errors.push(`Model '${configEntry.model}' not found in provider '${configEntry.provider}'`);
+      // Check if provider has models defined
+      if (provider.env.models !== undefined) {
+        result.isValid = false;
+        result.errors.push(`Model '${configEntry.model}' not found in provider '${configEntry.provider}'`);
+      }
+      // If provider has no models defined but is a built-in provider, 
+      // check against built-in models
+      else if (isBuiltInProvider) {
+        const builtInProvider = BUILT_IN_PROVIDERS[normalizedProvider];
+        if (builtInProvider) {
+          const modelSupported = builtInProvider.models.includes(configEntry.model);
+          if (!modelSupported) {
+            result.isValid = false;
+            result.errors.push(`Model '${configEntry.model}' not found in built-in provider '${configEntry.provider}'. Supported models: ${builtInProvider.models.join(', ')}`);
+          } else {
+            result.model = {
+              name: configEntry.model,
+              isSupported: true
+            };
+          }
+        }
+      }
+      // If provider has no models defined and is not built-in, it's an error
+      else {
+        result.isValid = false;
+        result.errors.push(`Provider '${configEntry.provider}' has no models defined`);
+      }
     } else {
       result.model = {
         name: model.model,
@@ -172,17 +236,25 @@ export function validateConfiguration(configName: string, configFile: ConfigFile
     }
 
     // Check for API key configuration
-    if (!provider.env.api_key) {
-      result.warnings.push(`No API key configured for provider '${configEntry.provider}'`);
+    if (!provider.env.api_key || !provider.env.api_key.trim()) {
+      // For built-in providers, we add a warning about API key that must be set at runtime
+      if (isBuiltInProvider) {
+        result.warnings.push(`Using built-in provider '${configEntry.provider}'. API key must be set via environment variable at runtime.`);
+      } else {
+        result.warnings.push(`No API key configured for provider '${configEntry.provider}'`);
+      }
     }
 
     // Check for base URL configuration
     if (!provider.env.base_url) {
-      result.warnings.push(`No base URL configured for provider '${configEntry.provider}'`);
+      // For built-in providers, we don't warn about missing base URL as we use the built-in one
+      if (!isBuiltInProvider) {
+        result.warnings.push(`No base URL configured for provider '${configEntry.provider}'`);
+      }
     }
 
     // Check if provider has any models
-    if (provider.env.models.length === 0) {
+    if (provider.env.models?.length === 0 && !isBuiltInProvider) {
       result.warnings.push(`Provider '${configEntry.provider}' has no models configured`);
     }
   }
@@ -209,32 +281,12 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
       return loadResult.errorResult;
     }
     
-    const { config, validation, filePath } = loadResult;
-
-    // Check if configuration file is valid
-    if (!validation.isValid) {
-      return {
-        success: false,
-        message: 'Configuration file validation failed',
-        details: validation.errors.length > 0 ? `Errors: ${validation.errors.join(', ')}` : undefined,
-        exitCode: 1
-      };
-    }
+    const { config, filePath } = loadResult;
 
     // Get all available configurations
     const availableConfigs = getAllConfigurationNames(config);
 
-    if (availableConfigs.length === 0) {
-      return {
-        success: false,
-        message: 'No configurations found',
-        details: 'Add configurations to your configuration file to validate them.',
-        exitCode: 1
-      };
-    }
-
-    // Determine which configurations to validate
-    let configsToValidate: string[];
+    // For single configuration validation, we don't need the entire config file to be valid
     if (options.configName) {
       if (!availableConfigs.includes(options.configName)) {
         return {
@@ -244,47 +296,33 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
           exitCode: 1
         };
       }
-      configsToValidate = [options.configName];
-    } else {
-      configsToValidate = availableConfigs;
-    }
-
-    // Validate configurations
-    const validationResults: ConfigValidationResult[] = [];
-    for (const configName of configsToValidate) {
-      const result = await validateConfigurationWithApi(configName, config, options.testApi || false);
-      validationResults.push(result);
-    }
-
-    // Build result message
-    const validConfigs = validationResults.filter(r => r.isValid);
-    const invalidConfigs = validationResults.filter(r => !r.isValid);
-
-    let message: string;
-    let details = '';
-    let success = true;
-
-    if (options.configName) {
-      // Single configuration validation
-      const result = validationResults[0];
-      if (!result) {
-        return {
-          success: false,
-          message: 'Internal error: validation result not found',
-          exitCode: 1
-        };
-      }
-
+      
+      // Validate just this configuration, regardless of overall config file validity
+      const result = await validateConfigurationWithApi(options.configName, config, options.testApi || false);
+      
+      // Build result message for single configuration
+      let message: string;
+      let details = '';
+      let success = true;
+      
       if (result.isValid) {
         message = `Configuration '${result.configName}' is valid`;
+        // Even if there are no errors, if there are warnings, we consider it invalid per requirements
         if (result.warnings.length > 0) {
+          message = `Configuration '${result.configName}' is invalid`;
+          success = false;
           details += `Warnings:\n${result.warnings.map(w => `  - ${w}`).join('\n')}`;
         }
       } else {
         message = `Configuration '${result.configName}' is invalid`;
-        details += `Errors:\n${result.errors.map(e => `  - ${e}`).join('\n')}`;
+        if (result.errors.length > 0) {
+          details += `Errors:\n${result.errors.map(e => `  - ${e}`).join('\n')}`;
+        }
         if (result.warnings.length > 0) {
-          details += `\n\nWarnings:\n${result.warnings.map(w => `  - ${w}`).join('\n')}`;
+          if (result.errors.length > 0) {
+            details += `\n\n`;
+          }
+          details += `Warnings:\n${result.warnings.map(w => `  - ${w}`).join('\n')}`;
         }
         success = false;
       }
@@ -293,76 +331,120 @@ export async function chkCommand(options: ChkCommandOptions = {}): Promise<Comma
       if (options.verbose) {
         if (result.provider) {
           details += `\n\nProvider details:`;
-          details += `\n  Name: ${result.provider.name}`;
-          details += `\n  Base URL: ${result.provider.baseUrl}`;
-          details += `\n  Available models: ${result.provider.modelCount}`;
+          details += `\n  Name: ${result.provider.name || 'undefined'}`;
+          details += `\n  Base URL: ${result.provider.baseUrl || 'undefined'}`;
+          details += `\n  Available models: ${result.provider.modelCount || 0}`;
         }
         if (result.model) {
           details += `\n\nModel details:`;
-          details += `\n  Name: ${result.model.name}`;
+          details += `\n  Name: ${result.model.name || 'undefined'}`;
           details += `\n  Supported: ${result.model.isSupported ? 'Yes' : 'No'}`;
         }
-        details += `\n\nConfiguration file: ${filePath}`;
+        details += `\n\nConfiguration file: ${filePath || 'undefined'}`;
       }
+      
+      return {
+        success,
+        message,
+        details: details.trim() == "" ? "" : "  " + details.trim(),  // For correct output indent, DO NOT TOUCH
+        exitCode: success ? 0 : 1
+      };
+    }
+    
+    // When validating all configurations, we want to show individual validation results
+    // even if the overall config file has some issues
+    if (availableConfigs.length === 0) {
+      return {
+        success: false,
+        message: 'No configurations found',
+        details: 'Add configurations to your configuration file to validate them.',
+        exitCode: 1
+      };
+    }
+
+    // Validate configurations
+    const validationResults: ConfigValidationResult[] = [];
+    for (const configName of availableConfigs) {
+      const result = await validateConfigurationWithApi(configName, config, options.testApi || false);
+      validationResults.push(result);
+    }
+
+    // Build result message
+    const validConfigs = validationResults.filter(r => r.isValid && r.warnings.length === 0);
+    const invalidConfigs = validationResults.filter(r => !r.isValid || r.warnings.length > 0);
+
+    let message: string;
+    let details = '';
+    let success = true;
+
+    // Multiple configuration validation
+    if (invalidConfigs.length === 0) {
+      message = `All ${validConfigs.length} configurations are valid`;
     } else {
-      // Multiple configuration validation
-      if (invalidConfigs.length === 0) {
-        message = `All ${validConfigs.length} configurations are valid`;
+      const validCount = validConfigs.length;
+      const totalCount = validationResults.length;
+      message = `${validCount} of ${totalCount} configurations are valid`;
+      success = false;
+    }
+
+    // Get default configuration for marking
+    const defaultConfig = getCurrentDefaultConfiguration(config);
+
+    // Build compact configuration list on same line
+    const configList: string[] = [];
+    const errorDetails: string[] = [];
+    
+    for (const result of validationResults) {
+      let status: string;
+      if (result.isValid && result.warnings.length === 0) {
+        status = '✓';
+      } else if (result.errors.length > 0) {
+        status = '✗';
+      } else if (result.warnings.length > 0) {
+        status = '⚠'; // Warning only
       } else {
-        const invalidCount = invalidConfigs.length;
-        const totalCount = validationResults.length;
-        if (invalidCount === 1) {
-          message = `${invalidCount} of ${totalCount} configurations is invalid`;
-        } else {
-          message = `${invalidCount} of ${totalCount} configurations are invalid`;
-        }
-        success = false;
-      }
-
-      // Get default configuration for marking
-      const defaultConfig = getCurrentDefaultConfiguration(config);
-
-      // Build compact configuration list on same line
-      const configList: string[] = [];
-      const errorDetails: string[] = [];
-      
-      for (const result of validationResults) {
-        const status = result.isValid ? '✓' : '✗';
-        const warningCount = result.warnings.length > 0 ? ` (${result.warnings.length} warnings)` : '';
-        const defaultMarker = result.configName === defaultConfig ? ' (default)' : '';
-        configList.push(`${status} ${result.configName}${defaultMarker}${warningCount}`);
-
-        // Collect error details for invalid configurations
-        if (!result.isValid && result.errors.length > 0) {
-          errorDetails.push(`✗ ${result.configName}\nErrors: ${result.errors.join(', ')}`);
-        }
-        
-        // Collect warning details if verbose mode
-        if (options.verbose && result.warnings.length > 0) {
-          errorDetails.push(`${status} ${result.configName}\nWarnings: ${result.warnings.join(', ')}`);
-        }
+        status = '✓'; // Valid with no warnings or errors
       }
       
-      // Add the compact configuration list (each on a new line with indentation)
-      // All items have two spaces indentation
-      if (configList.length > 0) {
+      const defaultMarker = result.configName === defaultConfig ? ' (default)' : '';
+      
+      // Always add to configList for non-verbose mode
+      configList.push(`${status} ${result.configName}${defaultMarker}`);
+
+      // For verbose mode, add all configurations with their status and details
+      if (result.isValid && result.warnings.length === 0) {
+        // Valid configurations
+        errorDetails.push(`  ${status} ${result.configName}${defaultMarker}`);
+      } else if (result.errors.length > 0) {
+        // Configurations with errors
+        const firstError = result.errors[0];
+        errorDetails.push(`  ${status} ${result.configName}${defaultMarker}: ${firstError}`);
+      } else if (result.warnings.length > 0) {
+        // Configurations with warnings only
+        const firstWarning = result.warnings[0];
+        errorDetails.push(`  ${status} ${result.configName}${defaultMarker}: ${firstWarning}`);
+      }
+    }
+    
+    // Add the compact configuration list (each on a new line with indentation)
+    // In non-verbose mode, show the simple list
+    // In verbose mode, show the detailed list
+    if (configList.length > 0) {
+      if (options.verbose && errorDetails.length > 0) {
+        details += '\n' + errorDetails.join('\n');
+      } else {
         details += '\n  ' + configList.join('\n  ');
       }
-      
-      // Add error details after the configuration list
-      if (errorDetails.length > 0) {
-        details += '\n' + errorDetails.join('\n');
-      }
+    }
 
-      if (options.verbose) {
-        details += `\n\nConfiguration file: ${filePath}`;
-      }
+    if (options.verbose) {
+      details += `\n\nConfiguration file: ${filePath}`;
     }
 
     return {
       success,
       message,
-      details: details.trim(),
+      details: details.trim() == "" ? "" : "  " + details.trim(),  // For correct output indent, DO NOT TOUCH
       exitCode: success ? 0 : 1
     };
   } catch (error) {

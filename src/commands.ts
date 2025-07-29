@@ -82,7 +82,7 @@ export function listConfigurations(
     return {
       success: true,
       message,
-      details: details.trim(),
+      details: details.trim() == "" ? "" : "  " + details.trim(),  // For correct output indent, DO NOT TOUCH
       exitCode: 0
     };
   } catch (error) {

@@ -116,7 +116,7 @@ describe('Startup - More Additional Branch Coverage Tests', () => {
 
       expect(result.success).toBe(false);
       expect(result.currentStep).toBe(StartupStep.CHECKING_CONFIG_FILE);
-      expect(result.errorMessage).toBe('Configuration file not found');
+      expect(result.errorMessage).toBe('Configuration file not found and environment variables not set');
       expect(result.exitCode).toBe(3); // CONFIG_NOT_FOUND
     });
 

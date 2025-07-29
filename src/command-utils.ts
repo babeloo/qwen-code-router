@@ -11,6 +11,7 @@ import {
 /**
  * 通用配置文件加载函数，用于需要配置文件的命令
  * @param currentDir - 当前工作目录
+ * @param skipValidation - 是否跳过配置文件验证（用于chk命令）
  * @returns 配置文件和验证结果，或错误结果
  */
 export async function loadConfigFile(currentDir?: string): Promise<{
@@ -24,6 +25,8 @@ export async function loadConfigFile(currentDir?: string): Promise<{
 }> {
   try {
     const result = await discoverAndLoadConfig(currentDir);
+    
+    // Always return the actual validation result
     return {
       success: true,
       config: result.config,
@@ -44,7 +47,8 @@ export async function loadConfigFile(currentDir?: string): Promise<{
         errorResult: createErrorResult(fileOperationError('load', 'configuration file', error.message))
       };
     } else {
-      throw error; // Re-throw unexpected errors
+      // Re-throw unexpected errors so they can be caught by the calling function
+      throw error;
     }
   }
 }

@@ -15,6 +15,7 @@ import {
   ModelEntry,
   ProviderEnv
 } from './types';
+import { BUILT_IN_PROVIDERS } from './resolver';
 
 /**
  * Validates the complete configuration file structure
@@ -288,11 +289,11 @@ export function validateProviderEnv(env: ProviderEnv, prefix: string): Validatio
   }
 
   // Validate base_url
-  if (typeof env.base_url !== 'string') {
+  if (env.base_url !== undefined && typeof env.base_url !== 'string') {
     errors.push(`${prefix}: base_url must be a string`);
-  } else if (!env.base_url.trim()) {
+  } else if (env.base_url !== undefined && !env.base_url.trim()) {
     errors.push(`${prefix}: base_url cannot be empty`);
-  } else {
+  } else if (env.base_url !== undefined) {
     // Validate URL format
     try {
       new URL(env.base_url);
@@ -302,9 +303,9 @@ export function validateProviderEnv(env: ProviderEnv, prefix: string): Validatio
   }
 
   // Validate models array
-  if (!Array.isArray(env.models)) {
+  if (env.models !== undefined && !Array.isArray(env.models)) {
     errors.push(`${prefix}: models must be an array`);
-  } else {
+  } else if (env.models !== undefined) {
     if (env.models.length === 0) {
       warnings.push(`${prefix}: models array is empty`);
     }
@@ -390,14 +391,24 @@ export function validateProviderModelCrossReferences(configs: Config[], provider
       if (typeof entry.provider === 'string' && entry.provider.trim()) {
         const provider = providerMap.get(entry.provider);
         if (!provider) {
-          errors.push(`${prefix}: Provider "${entry.provider}" not found in providers array`);
+          // Check if it's a built-in provider
+          const isBuiltInProvider = Object.keys(BUILT_IN_PROVIDERS).includes(entry.provider.toLowerCase());
+          if (!isBuiltInProvider) {
+            errors.push(`${prefix}: Provider "${entry.provider}" not found in providers array`);
+          }
+          // For built-in providers, we'll validate the model separately
         } else {
           // Check if model exists in provider's models
           if (typeof entry.model === 'string' && entry.model.trim()) {
-            const modelExists = provider.env?.models?.some(m => m.model === entry.model);
-            if (!modelExists) {
-              errors.push(`${prefix}: Model "${entry.model}" not found in provider "${entry.provider}" models list`);
+            // If provider has models defined, check against those
+            if (provider.env?.models !== undefined) {
+              const modelExists = provider.env.models.some(m => m.model === entry.model);
+              if (!modelExists) {
+                errors.push(`${prefix}: Model "${entry.model}" not found in provider "${entry.provider}" models list`);
+              }
             }
+            // If provider has no models defined, we assume it's a built-in provider 
+            // and validation will happen at runtime
           }
         }
       }
